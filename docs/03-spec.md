@@ -137,7 +137,7 @@ Errors: `400` bad id, `404 USER_NOT_FOUND`.
 
 ### 4.2 `GET /instruments?q=&limit=&offset=`
 
-FR-S1, FR-S2. `q` is required, 1 to 100 characters after trim. `limit` 1 to 100, default 20. `offset` default 0.
+FR-S1, FR-S2. `q` is required, 1 to 100 characters after trim. `limit` 1 to 100, default 20. `offset` 0 to 2,147,483,647, default 0. An unknown query field is refused like an unknown body field.
 
 `200`: an array of `{ "id", "ticker", "name", "type" }`.
 
@@ -370,7 +370,9 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Unknown route, malformed JSON | `404 NOT_FOUND`; `400 VALIDATION_ERROR` |
 | Health with the database down | `503 DATABASE_UNAVAILABLE` |
 | Unknown fields in a body | Refused |
-| Paging | `limit` 1 to 100, default 20 |
+| Paging | `limit` 1 to 100, default 20. `offset` up to 2,147,483,647, the same bound as an id. A `limit` above 100 is a `400`, not silently lowered |
+| Unknown query fields | Refused, the same as in a body |
+| Search order after ticker | By id, so that paging is stable if two instruments ever share a ticker |
 | Portfolio ordering | By market value, descending |
 | Rounding of percentages | Half away from zero, so a gain and a loss of the same size show the same number. For cost, which is never negative, this is the same as half up |
 | Portfolio `currency` | The constant `ARS`. The system has one currency: one cash instrument, every price in pesos |
