@@ -30,7 +30,7 @@ The last two rules exist because the seed data has a sale larger than the holdin
 
 **Daily return (%).** `(close - previousClose) / previousClose`, from the same `marketdata` row as the position value, shown with two decimals.
 
-Each example below becomes a test with these exact values.
+Each example below is a test with these exact values: [U1](../../tests/accountState.test.ts), [U2](../../tests/accountState.test.ts), [U3](../../tests/accountState.test.ts).
 
 Worked example:
 
@@ -92,6 +92,18 @@ There is no daily return for the whole account. It would be distorted by deposit
 - Rounding to the cent on each sale means the cost of a position can differ by a cent from a calculation done once at the end. The rounding example fixes the rule, and tests pin the exact values.
 - A position that was partly sold at a profit shows only the return of what is left. A user who wants "how much did I make on this asset" needs realised gains as well, which this version does not report.
 - `marketdata` holds only the last two days, so `previousClose` always comes from the same row as `close`; there is no history to compute longer returns.
+
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [U1](../../tests/accountState.test.ts) | The worked example |
+| [U2](../../tests/accountState.test.ts) | The rounding example |
+| [U3](../../tests/accountState.test.ts) | The oversold example, including the later purchase |
+| [P1](../../tests/portfolio.test.ts) | Both returns and the average cost, on the seed portfolio |
+| [P2](../../tests/portfolio.test.ts) | No market price: valued at cost, both returns `null`, `priceAvailable: false` |
 
 ## Revisit when
 

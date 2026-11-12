@@ -33,7 +33,7 @@ SELECT id FROM users WHERE id = $1 FOR UPDATE
 
 ## Evidence
 
-In a first prototype (kept outside this repository) a test fired 10 simultaneous orders at a balance that fits 3 of them, and expected exactly 3 filled and 7 rejected. With the lock removed it let 6 to 9 orders through; with the lock it passed every time. The same test will be written for this version before the implementation, and this record will link to it.
+In a first prototype (kept outside this repository) a test fired 10 simultaneous orders at a balance that fits 3 of them, and expected exactly 3 filled and 7 rejected. With the lock removed it let 6 to 9 orders through; with the lock it passed every time. The same test was written for this version before the lock was implemented: [O11](../../tests/orders.test.ts).
 
 ## Alternatives considered
 
@@ -51,6 +51,17 @@ In a first prototype (kept outside this repository) a test fired 10 simultaneous
 - Orders of one user are processed one at a time. The lock is held for the whole replay of that user's history, so its duration grows with the history.
 - Any future writer that changes a user's cash or shares must take the same lock. A LIMIT execution job is the obvious example.
 - A long transaction holding the lock blocks that user's other orders. Statement and lock timeouts are part of the production path ([0008](0008-nfr-assumptions-and-production-path.md)).
+
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [O11](../../tests/orders.test.ts) | 10 simultaneous orders against a balance that fits 3 give exactly 3 `FILLED` and 7 `REJECTED` |
+| [I6](../../tests/idempotency.test.ts) | Two simultaneous requests with the same key give one row: the key is checked inside the lock |
+| [E2](../../tests/errors.test.ts) | A request that waits longer than the lock timeout is answered `503 BUSY` and stores nothing |
+| [C1](../../tests/cancel.test.ts), [C2](../../tests/cancel.test.ts) | Cancel is one conditional `UPDATE`: only a `NEW` order of that user changes |
 
 ## Revisit when
 

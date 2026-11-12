@@ -27,7 +27,7 @@ The limit price is used because it is the worst case for a BUY: it is the only a
 
 **How this reads the brief.** The brief asks for the "available balance in pesos for trading" and says to compute it from "all relevant transactions in the `orders` table". I read open LIMIT orders as relevant to what is *available*, while cash and positions themselves still come from `FILLED` orders only (FR-P4).
 
-**In my seed data** (user 1 of the `database.sql` I rebuilt from the brief), which becomes a test with these values:
+**In my seed data** (user 1 of the `database.sql` I rebuilt from the brief), pinned by tests [U4](../../tests/accountState.test.ts), [P1](../../tests/portfolio.test.ts):
 
 | Number | Value | From |
 | --- | --- | --- |
@@ -51,6 +51,18 @@ Without this decision the available balance would be 753,000.00. Both figures ar
 - Money can stay locked in orders that never execute. The user sees it as the difference between cash balance and available balance, and can cancel to release it.
 - Executing LIMIT orders is out of scope (the brief says there is no need to simulate the market), so nothing moves an order from `NEW` to `FILLED` yet. When something does, it must take the same per-user lock as order submission ([0003](0003-per-user-row-lock.md)).
 - A `NEW` order is part of the read that every submission does, so the `(userId, status)` index matters for both statuses.
+
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [U4](../../tests/accountState.test.ts), [P1](../../tests/portfolio.test.ts) | The seed values of the table above: 753,000.00, 125,500.00, 627,500.00 |
+| [O4](../../tests/orders.test.ts) | A LIMIT order is stored `NEW` and lowers `availableBalance`, not `cashBalance` |
+| [O5](../../tests/orders.test.ts), [O6](../../tests/orders.test.ts) | Reserved cash cannot buy and reserved shares cannot be sold again |
+| [T2](../../tests/transfers.test.ts) | Reserved cash cannot be withdrawn |
+| [C1](../../tests/cancel.test.ts) | Cancelling releases the reservation |
 
 ## Revisit when
 
