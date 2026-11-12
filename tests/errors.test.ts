@@ -53,6 +53,16 @@ describe('E1: one error shape', () => {
     expectError(res, 400, 'VALIDATION_ERROR');
   });
 
+  it('a body above 10 kB is 400 VALIDATION_ERROR and says the body is too large', async () => {
+    const res = await api
+      .post('/orders')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ userId: 1, pad: 'x'.repeat(20_000) }));
+
+    expectError(res, 400, 'VALIDATION_ERROR');
+    expect(res.body.error.message).toMatch(/too large/i);
+  });
+
   it('a schema failure is 400 VALIDATION_ERROR and names the field', async () => {
     const res = await failingApp().get('/invalid');
 
@@ -132,6 +142,21 @@ describe('E1: logs', () => {
     }
   });
 
+  it('writes the route without the query string', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const sink = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const res = await api.get('/health?foo=bar');
+
+      expectError(res, 400, 'VALIDATION_ERROR');
+      const line = JSON.parse(String(sink.mock.calls[0]?.[0]));
+      expect(line).toMatchObject({ method: 'GET', path: '/health', status: 400 });
+    } finally {
+      sink.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('writes an error line with the request id', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -205,6 +230,20 @@ describe('E2: timeouts are 503 BUSY', () => {
     }
     const stored = await pool.query('SELECT 1 FROM orders WHERE userid = $1', [userId]);
     expect(stored.rowCount).toBe(0);
+  });
+
+  it('a statement through the pool above the statement timeout is 503 BUSY', async () => {
+    const app = express();
+    app.use(requestContext);
+    app.get('/slow-pool', async () => {
+      // createPool sets statement_timeout to 5 s (spec, section 5).
+      await pool.query('SELECT pg_sleep(6)');
+    });
+    app.use(errorHandler);
+
+    const res = await request(app).get('/slow-pool');
+
+    expectError(res, 503, 'BUSY');
   });
 
   it('a statement that runs longer than the statement timeout is 503 BUSY', async () => {

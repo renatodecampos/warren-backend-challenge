@@ -54,7 +54,7 @@ Without this decision the available balance would be 753,000.00. Both figures ar
 
 ## Tests
 
-The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test is grouped under its id.
 
 | Test | What it pins |
 | --- | --- |
