@@ -53,19 +53,19 @@ These are the ambiguities from [01 Requirements, section 4](01-requirements.md#4
 
 | Id | Question | Assumption | ADR | I would revisit if |
 | --- | --- | --- | --- | --- |
-| Q1 | Does an open LIMIT order reserve funds? | Yes. A `NEW` BUY reserves `size x limit price`, a `NEW` SELL reserves its shares | planned | Product says open orders must not block funds |
-| Q2 | HTTP response when the market rejects an order | 201 with `status: REJECTED` and a reason. The order exists, so a resource was created | planned | The API opens to third parties who expect 2xx to mean success |
-| Q3 | Definition of total return | `(market value - cost) / cost`, average cost of the shares still held | planned | Tax reporting requires FIFO |
-| Q4 | Total return and daily return | Both are returned: total return per position, daily return from `close` and `previousClose` | no | The consumer only needs one |
-| Q5 | Total account value | Cash plus market value of holdings. Reserved cash still belongs to the user, so it is not subtracted | with Q1 | |
-| Q6 | `amount` buys less than one share | 422, nothing stored: there is no valid `size` to record | with Q2 | |
+| Q1 | Does an open LIMIT order reserve funds? | Yes. A `NEW` BUY reserves `size x limit price`, a `NEW` SELL reserves its shares | [0002](adr/0002-open-limit-orders-reserve-funds.md) | Product says open orders must not block funds |
+| Q2 | HTTP response when the market rejects an order | 201 with `status: REJECTED` and a reason. The order exists, so a resource was created | [0005](adr/0005-rejected-orders-are-stored.md) | The API opens to third parties who expect 2xx to mean success |
+| Q3 | Definition of total return | `(market value - cost) / cost`, average cost of the shares still held | [0007](adr/0007-return-definitions.md) | Tax reporting requires FIFO |
+| Q4 | Total return and daily return | Both are returned: total return per position, daily return from `close` and `previousClose` | [0007](adr/0007-return-definitions.md) | The consumer only needs one |
+| Q5 | Total account value | Cash plus market value of holdings. Reserved cash still belongs to the user, so it is not subtracted | [0002](adr/0002-open-limit-orders-reserve-funds.md) | |
+| Q6 | `amount` buys less than one share | 422, nothing stored: there is no valid `size` to record | [0005](adr/0005-rejected-orders-are-stored.md) | |
 | Q7 | What "similar" means in search | Case-insensitive substring on ticker and name, ranked exact ticker, ticker prefix, name prefix, then the rest | no | Typo tolerance is required |
-| Q8 | Instrument without a market price | MARKET order is stored `REJECTED` (`NO_MARKET_PRICE`); a position is valued at cost and flagged | no | |
-| Q9 | Concurrent orders from one user | One row lock per user around check and insert | planned | Lock wait shows up in latency |
-| Q10 | The same order sent twice | An `Idempotency-Key` header, unique per user: a repeat returns the stored order | planned | |
+| Q8 | Instrument without a market price | MARKET order is stored `REJECTED` (`NO_MARKET_PRICE`); a position is valued at cost and flagged | [0005](adr/0005-rejected-orders-are-stored.md), [0007](adr/0007-return-definitions.md) | |
+| Q9 | Concurrent orders from one user | One row lock per user around check and insert | [0003](adr/0003-per-user-row-lock.md) | Lock wait shows up in latency |
+| Q10 | The same order sent twice | An `Idempotency-Key` header, unique per user: a repeat returns the stored order | [0004](adr/0004-idempotency-key.md) | |
 | Q11 | Seed user who sold more than they bought | The write path blocks selling shares the user does not hold. Historical rows are read as they are; non-positive positions are not listed | no | |
-| Q12 | `CASH_OUT` limit and decimals | Withdrawal cannot exceed available cash. Whole pesos only, because `size` is an integer | no | Cents are needed in transfers |
-| Q13 | Volume, availability, security | See section 3 | planned | Real figures replace these |
+| Q12 | `CASH_OUT` limit and decimals | Withdrawal cannot exceed available cash. Whole pesos only, because `size` is an integer | [0005](adr/0005-rejected-orders-are-stored.md), [0006](adr/0006-integer-cents-and-order-value-cap.md) | Cents are needed in transfers |
+| Q13 | Volume, availability, security | See section 3 | [0008](adr/0008-nfr-assumptions-and-production-path.md) | Real figures replace these |
 
 ## 3. Non-functional assumptions
 
@@ -176,7 +176,8 @@ Ordered by what I would do first. Each has a trigger, so nothing is built ahead 
 
 ## 7. What comes next
 
-1. Whiteboard v1: this design, with the idempotency check and the production path drawn.
-2. ADRs, one per decision marked "planned" in section 2: reservation (Q1, Q5), rejected orders (Q2, Q6), return definition (Q3), per-user lock (Q9), idempotency (Q10), money, and the non-functional assumptions (Q13).
-3. Code and tests, one vertical slice at a time, each slice test first.
-4. Code review of my own work.
+1. Fix the labels on whiteboard v1 (duplicated text, dashed gateway, the unique constraint and `request_hash`).
+2. Code and tests, one vertical slice at a time, each slice test first.
+3. Code review of my own work.
+
+The decisions that came out of this design are the [ADRs](adr/README.md).

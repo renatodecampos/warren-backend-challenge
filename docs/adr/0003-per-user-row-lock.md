@@ -50,7 +50,7 @@ In a first prototype (kept outside this repository) a test fired 10 simultaneous
 - No overdraft from concurrent requests, on any number of instances.
 - Orders of one user are processed one at a time. The lock is held for the whole replay of that user's history, so its duration grows with the history.
 - Any future writer that changes a user's cash or shares must take the same lock. A LIMIT execution job is the obvious example.
-- A long transaction holding the lock blocks that user's other orders. Statement and lock timeouts are part of the production path (ADR 0008, planned).
+- A long transaction holding the lock blocks that user's other orders. Statement and lock timeouts are part of the production path ([0008](0008-nfr-assumptions-and-production-path.md)).
 
 ## Revisit when
 

@@ -11,7 +11,7 @@ The brief leaves several things open. Instead of guessing silently, each record 
 | [0005](0005-rejected-orders-are-stored.md) | Orders refused by the market are stored as `REJECTED` and return 201 | Accepted |
 | [0006](0006-integer-cents-and-order-value-cap.md) | Money is handled as integer cents, with a cap on order value | Accepted |
 | [0007](0007-return-definitions.md) | Returns: total at average cost, daily per position | Accepted |
-| 0008 | Non-functional assumptions and the path to production | Planned |
+| [0008](0008-nfr-assumptions-and-production-path.md) | Non-functional assumptions and the path to production | Accepted |
 
 ## Format
 
