@@ -5,7 +5,7 @@ import { transaction } from './db';
 import { AppError } from './errors';
 import { exceedsOrderValueCap, fromCents, MAX_ORDER_SIZE, sharesForAmount, toCents } from './money';
 
-/** Order submission (spec, section 4.3). What is stored and what is refused: ADR 0005. */
+/** Orders and transfers (spec, sections 4.3 to 4.6). What is stored and what is refused: ADR 0005. */
 
 /** The validated body of `POST /orders`: money in pesos, exactly as the client sent it. */
 export interface OrderRequest {
@@ -19,6 +19,15 @@ export interface OrderRequest {
   price?: number | undefined;
 }
 
+/** The validated body of `POST /transfers`: whole pesos. */
+export interface TransferRequest {
+  userId: number;
+  side: 'CASH_IN' | 'CASH_OUT';
+  amount: number;
+}
+
+export type OrderStatus = 'NEW' | 'FILLED' | 'REJECTED' | 'CANCELLED';
+
 type RejectionReason = 'INSUFFICIENT_FUNDS' | 'INSUFFICIENT_SHARES' | 'NO_MARKET_PRICE';
 
 export interface Order {
@@ -30,9 +39,16 @@ export interface Order {
   type: string;
   size: number;
   price: number | null;
-  status: 'NEW' | 'FILLED' | 'REJECTED';
+  status: OrderStatus;
   rejectionReason: RejectionReason | null;
   datetime: string;
+}
+
+/** What is written to the `orders` row besides the instrument, the size and the outcome. */
+interface OrderHeader {
+  userId: number;
+  side: string;
+  type: string;
 }
 
 /** An order and whether it was already stored by an earlier request with the same key. */
@@ -50,43 +66,33 @@ interface Idempotency {
 const CASH_TYPE = 'MONEDA';
 
 /** SHA-256, in hex, of the validated body as JSON with its keys sorted and absent fields omitted. */
-function hashRequest(request: OrderRequest): string {
+function hashRequest(request: OrderRequest | TransferRequest): string {
   const canonical = JSON.stringify(request, Object.keys(request).sort());
   return createHash('sha256').update(canonical).digest('hex');
 }
 
 interface StoredOrderRow {
   id: number;
+  userid: number;
   instrumentid: number;
   ticker: string;
   side: string;
   type: string;
   size: number;
   price: string | null;
-  status: Order['status'];
+  status: OrderStatus;
   rejection_reason: RejectionReason | null;
   datetime: Date;
-  request_hash: string | null;
 }
 
-/** The order this user already stored with this key, or `null`. Refuses a key reused for another request. */
-async function findReplay(client: ClientBase, userId: number, idempotency: Idempotency): Promise<Order | null> {
-  const found = await client.query<StoredOrderRow>(
-    `SELECT o.id, o.instrumentid, i.ticker, o.side, o.type, o.size, o.price, o.status, o.rejection_reason,
-            o.datetime AT TIME ZONE 'UTC' AS datetime, o.request_hash
-       FROM orders o
-       JOIN instruments i ON i.id = o.instrumentid
-      WHERE o.userid = $1 AND o.idempotency_key = $2`,
-    [userId, idempotency.key],
-  );
-  const row = found.rows[0];
-  if (!row) return null;
-  if (row.request_hash !== idempotency.requestHash) {
-    throw new AppError(422, 'IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used for a different request');
-  }
+/** The columns of a stored order, for a query that names `orders` as `o` and `instruments` as `i`. */
+const ORDER_COLUMNS = `o.id, o.userid, o.instrumentid, i.ticker, o.side, o.type, o.size, o.price, o.status,
+                       o.rejection_reason, o.datetime AT TIME ZONE 'UTC' AS datetime`;
+
+function toOrder(row: StoredOrderRow): Order {
   return {
     id: row.id,
-    userId,
+    userId: row.userid,
     instrumentId: row.instrumentid,
     ticker: row.ticker,
     side: row.side,
@@ -97,6 +103,31 @@ async function findReplay(client: ClientBase, userId: number, idempotency: Idemp
     rejectionReason: row.rejection_reason,
     datetime: row.datetime.toISOString(),
   };
+}
+
+/** The per-user lock: ADR 0003. */
+async function lockUser(client: ClientBase, userId: number): Promise<void> {
+  const user = await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+  if (user.rowCount === 0) {
+    throw new AppError(404, 'USER_NOT_FOUND', `User ${userId} does not exist`);
+  }
+}
+
+/** The order this user already stored with this key, or `null`. Refuses a key reused for another request. */
+async function findReplay(client: ClientBase, userId: number, idempotency: Idempotency): Promise<Order | null> {
+  const found = await client.query<StoredOrderRow & { request_hash: string | null }>(
+    `SELECT ${ORDER_COLUMNS}, o.request_hash
+       FROM orders o
+       JOIN instruments i ON i.id = o.instrumentid
+      WHERE o.userid = $1 AND o.idempotency_key = $2`,
+    [userId, idempotency.key],
+  );
+  const row = found.rows[0];
+  if (!row) return null;
+  if (row.request_hash !== idempotency.requestHash) {
+    throw new AppError(422, 'IDEMPOTENCY_KEY_REUSED', 'This idempotency key was already used for a different request');
+  }
+  return toOrder(row);
 }
 
 interface InstrumentRow {
@@ -142,11 +173,11 @@ async function marketPriceCents(client: ClientBase, instrumentId: number): Promi
 
 async function insertOrder(
   client: ClientBase,
-  request: OrderRequest,
+  header: OrderHeader,
   instrument: InstrumentRow,
   size: number,
   priceCents: number | null,
-  status: Order['status'],
+  status: OrderStatus,
   rejectionReason: RejectionReason | null,
   idempotency: Idempotency | null,
 ): Promise<Order> {
@@ -159,11 +190,11 @@ async function insertOrder(
      RETURNING id, datetime AT TIME ZONE 'UTC' AS datetime`,
     [
       instrument.id,
-      request.userId,
-      request.side,
+      header.userId,
+      header.side,
       size,
       priceCents,
-      request.type,
+      header.type,
       status,
       rejectionReason,
       idempotency?.key ?? null,
@@ -175,11 +206,11 @@ async function insertOrder(
 
   return {
     id: row.id,
-    userId: request.userId,
+    userId: header.userId,
     instrumentId: instrument.id,
     ticker: instrument.ticker,
-    side: request.side,
-    type: request.type,
+    side: header.side,
+    type: header.type,
     size,
     price: priceCents === null ? null : fromCents(priceCents),
     status,
@@ -192,11 +223,7 @@ export async function submitOrder(pool: Pool, request: OrderRequest, idempotency
   const idempotency = idempotencyKey === undefined ? null : { key: idempotencyKey, requestHash: hashRequest(request) };
 
   return transaction(pool, async (client) => {
-    // The per-user lock: ADR 0003.
-    const user = await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [request.userId]);
-    if (user.rowCount === 0) {
-      throw new AppError(404, 'USER_NOT_FOUND', `User ${request.userId} does not exist`);
-    }
+    await lockUser(client, request.userId);
 
     // Inside the lock and before anything is evaluated: ADR 0004.
     if (idempotency) {
@@ -246,4 +273,84 @@ export async function submitOrder(pool: Pool, request: OrderRequest, idempotency
     const order = await insertOrder(client, request, instrument, size, priceCents, status, rejectionReason, idempotency);
     return { order, replayed: false };
   });
+}
+
+/** Deposits and withdrawals: orders on the cash instrument at a price of 1 (spec, section 4.6; ADR 0001). */
+export async function submitTransfer(
+  pool: Pool,
+  request: TransferRequest,
+  idempotencyKey?: string,
+): Promise<Submission> {
+  const idempotency = idempotencyKey === undefined ? null : { key: idempotencyKey, requestHash: hashRequest(request) };
+
+  return transaction(pool, async (client) => {
+    await lockUser(client, request.userId);
+
+    if (idempotency) {
+      const stored = await findReplay(client, request.userId, idempotency);
+      if (stored) return { order: stored, replayed: true };
+    }
+
+    const found = await client.query<InstrumentRow>(
+      'SELECT id, ticker, type FROM instruments WHERE type = $1 ORDER BY id LIMIT 1',
+      [CASH_TYPE],
+    );
+    const cash = found.rows[0];
+    if (!cash) throw new Error('There is no cash instrument');
+
+    const state = await loadAccountState(client, request.userId);
+    const rejectionReason =
+      request.side === 'CASH_OUT' && toCents(request.amount) > availableCashCents(state) ? 'INSUFFICIENT_FUNDS' : null;
+
+    const order = await insertOrder(
+      client,
+      { userId: request.userId, side: request.side, type: 'MARKET' },
+      cash,
+      request.amount,
+      toCents(1),
+      rejectionReason ? 'REJECTED' : 'FILLED',
+      rejectionReason,
+      idempotency,
+    );
+    return { order, replayed: false };
+  });
+}
+
+/** One conditional statement, without the user lock: it can only release a reservation (ADR 0003). */
+export async function cancelOrder(pool: Pool, orderId: number, userId: number): Promise<Order> {
+  const cancelled = await pool.query<StoredOrderRow>(
+    `UPDATE orders o SET status = 'CANCELLED'
+       FROM instruments i
+      WHERE i.id = o.instrumentid AND o.id = $1 AND o.userid = $2 AND o.status = 'NEW'
+      RETURNING ${ORDER_COLUMNS}`,
+    [orderId, userId],
+  );
+  const row = cancelled.rows[0];
+  if (row) return toOrder(row);
+
+  const existing = await pool.query('SELECT 1 FROM orders WHERE id = $1 AND userid = $2', [orderId, userId]);
+  if (existing.rowCount === 0) {
+    throw new AppError(404, 'ORDER_NOT_FOUND', `Order ${orderId} does not exist`);
+  }
+  throw new AppError(409, 'ORDER_NOT_CANCELLABLE', 'Only an order that is NEW can be cancelled');
+}
+
+/** A user's orders, newest first (spec, section 4.5). */
+export async function listOrders(
+  pool: Pool,
+  userId: number,
+  status: OrderStatus | undefined,
+  limit: number,
+  offset: number,
+): Promise<Order[]> {
+  const found = await pool.query<StoredOrderRow>(
+    `SELECT ${ORDER_COLUMNS}
+       FROM orders o
+       JOIN instruments i ON i.id = o.instrumentid
+      WHERE o.userid = $1 AND ($2::text IS NULL OR o.status = $2)
+      ORDER BY o.datetime DESC, o.id DESC
+      LIMIT $3 OFFSET $4`,
+    [userId, status ?? null, limit, offset],
+  );
+  return found.rows.map(toOrder);
 }

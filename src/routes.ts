@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AppError } from './errors';
 import { searchInstruments } from './instruments';
 import { hasAtMostTwoDecimals, MAX_ORDER_SIZE } from './money';
-import { submitOrder } from './orders';
+import { cancelOrder, listOrders, submitOrder, submitTransfer } from './orders';
 import { getPortfolio } from './portfolio';
 
 /** A positive 32-bit integer written in plain digits (spec, section 2). */
@@ -17,10 +17,21 @@ const id = z
 /** A whole number written in plain digits, as a query string carries it. */
 const digits = z.string().regex(/^\d{1,10}$/, 'must be a whole number').transform(Number);
 
-const searchQuery = z.strictObject({
-  q: z.string().trim().min(1).max(100),
+/** Paging, the same for every list (spec, section 4.2). */
+const paging = {
   limit: digits.refine((value) => value >= 1 && value <= 100, 'must be between 1 and 100').default(20),
   offset: digits.refine((value) => value <= 2_147_483_647, 'must be a 32-bit integer').default(0),
+};
+
+const searchQuery = z.strictObject({
+  q: z.string().trim().min(1).max(100),
+  ...paging,
+});
+
+const ordersQuery = z.strictObject({
+  userId: id,
+  status: z.enum(['NEW', 'FILLED', 'REJECTED', 'CANCELLED']).optional(),
+  ...paging,
 });
 
 /** An id as a JSON body carries it: a number, not a string. */
@@ -52,6 +63,15 @@ const orderBody = z
     path: ['price'],
     message: 'is required for LIMIT and refused for MARKET',
   });
+
+const cancelBody = z.strictObject({ userId: bodyId });
+
+/** Whole pesos (spec, section 4.6). */
+const transferBody = z.strictObject({
+  userId: bodyId,
+  side: z.enum(['CASH_IN', 'CASH_OUT']),
+  amount: z.number().int().min(1).max(99_999_999),
+});
 
 /** The optional `Idempotency-Key` header: 1 to 50 printable ASCII characters (spec, section 4.3). */
 const idempotencyHeader = z.object({
@@ -87,6 +107,24 @@ export function createRoutes(pool: Pool): Router {
     const body = orderBody.parse(req.body);
     const key = idempotencyHeader.parse({ 'idempotency-key': req.get('idempotency-key') })['idempotency-key'];
     const { order, replayed } = await submitOrder(pool, body, key);
+    res.status(replayed ? 200 : 201).json(order);
+  });
+
+  router.get('/orders', async (req, res) => {
+    const { userId, status, limit, offset } = ordersQuery.parse(req.query);
+    res.json(await listOrders(pool, userId, status, limit, offset));
+  });
+
+  router.post('/orders/:orderId/cancel', async (req, res) => {
+    const { orderId } = z.object({ orderId: id }).parse(req.params);
+    const { userId } = cancelBody.parse(req.body);
+    res.json(await cancelOrder(pool, orderId, userId));
+  });
+
+  router.post('/transfers', async (req, res) => {
+    const body = transferBody.parse(req.body);
+    const key = idempotencyHeader.parse({ 'idempotency-key': req.get('idempotency-key') })['idempotency-key'];
+    const { order, replayed } = await submitTransfer(pool, body, key);
     res.status(replayed ? 200 : 201).json(order);
   });
 
