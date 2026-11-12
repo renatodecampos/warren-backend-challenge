@@ -49,6 +49,15 @@ Layout: routes (HTTP and validation), services (one per capability, own the tran
 - Tests need Docker, or a PostgreSQL to point at. They are slower than mocked unit tests, which is acceptable at this size.
 - Express gives no structure by itself. The layout above is a convention that the code has to keep.
 
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [D1](../../tests/health.test.ts) | The base file and the numbered migration apply to an empty PostgreSQL |
+| [O11](../../tests/orders.test.ts) | What a mocked database could not test: the lock, on a real PostgreSQL |
+
 ## Revisit when
 
 - The service joins a team that already has a standard (framework, ORM, migration tool). Consistency across services is worth more than any of the reasons above.

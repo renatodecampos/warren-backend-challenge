@@ -1,0 +1,419 @@
+# Request collection for the trading API (spec: docs/03-spec.md, section 4).
+#
+# Format: REST Client. In VS Code, install the "REST Client" extension and click
+# "Send Request" above any request. The file is plain text, so it also reads as
+# documentation, and each request maps to one curl call (see the README).
+#
+# The requests are a walk-through, written to be sent top to bottom on a fresh
+# seed (`npm run db:reset`, then `npm run dev`). The outcome noted above each
+# request is what that run returns. Sent in another order, or twice, the
+# balances differ and so may the outcome: that is the API working, not an error.
+#
+# Two things to know before reading the answers:
+#   - A 201 is not "the order went through". An order the market refuses is
+#     stored and returned with 201 and "status": "REJECTED" (ADR 0005).
+#     Always read `status`.
+#   - One order is worth at most 99,999,999.99 pesos (ADR 0006). Above that the
+#     answer is 422 ORDER_VALUE_TOO_LARGE and the order must be split.
+
+@baseUrl = http://localhost:3000
+@userId = 1
+
+### Health
+# 200 { "status": "ok" }
+GET {{baseUrl}}/health
+
+
+# ---------------------------------------------------------------------------
+# Portfolio (spec 4.1)
+# ---------------------------------------------------------------------------
+
+### Portfolio of user 1
+# 200. On the fresh seed: totalAccountValue 904784, cashBalance 753000,
+# reservedCash 125500 (two open LIMIT BUY orders), availableBalance 627500,
+# and two positions, METR (500) and PAMP (40).
+GET {{baseUrl}}/users/{{userId}}/portfolio
+
+### Portfolio of a user that does not exist
+# 404 USER_NOT_FOUND
+GET {{baseUrl}}/users/999/portfolio
+
+
+# ---------------------------------------------------------------------------
+# Asset search (spec 4.2)
+# ---------------------------------------------------------------------------
+
+### Search by ticker, any case
+# 200: PAMP
+GET {{baseUrl}}/instruments?q=pamp
+
+### Search by name
+# 200: six instruments with "gas" in the name
+GET {{baseUrl}}/instruments?q=gas
+
+### Search with paging
+# 200: the second and third match for "banco" (BHIP, BMA)
+GET {{baseUrl}}/instruments?q=banco&limit=2&offset=1
+
+### Search without q
+# 400 VALIDATION_ERROR
+GET {{baseUrl}}/instruments
+
+
+# ---------------------------------------------------------------------------
+# Orders (spec 4.3)
+# ---------------------------------------------------------------------------
+
+### MARKET BUY by size, instrument given by id
+# 201 FILLED at the latest close: 10 PAMP at 925.85
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "instrumentId": 47,
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 10
+}
+
+### MARKET BUY by amount, instrument given by ticker
+# 201 FILLED: floor(1000 / 229.50) = 4 METR
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "metr",
+  "side": "BUY",
+  "type": "MARKET",
+  "amount": 1000
+}
+
+### LIMIT BUY
+# 201 NEW. It reserves 10 x 900.00: the portfolio's availableBalance drops by
+# 9000 and cashBalance does not move (ADR 0002). Cancelled further down.
+# @name limitBuy
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "LIMIT",
+  "size": 10,
+  "price": 900
+}
+
+### LIMIT SELL
+# 201 NEW. It reserves 100 of the 504 METR held.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "METR",
+  "side": "SELL",
+  "type": "LIMIT",
+  "size": 100,
+  "price": 260
+}
+
+### MARKET SELL
+# 201 FILLED: 20 PAMP at 925.85
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "SELL",
+  "type": "MARKET",
+  "size": 20
+}
+
+### BUY above the available cash
+# 201, "status": "REJECTED", "rejectionReason": "INSUFFICIENT_FUNDS".
+# 1000 BMA at 1502.80 is more than the account has. The order is stored.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "BMA",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 1000
+}
+
+### SELL above the available shares
+# 201, "status": "REJECTED", "rejectionReason": "INSUFFICIENT_SHARES".
+# 504 METR are held, but 100 are reserved by the LIMIT SELL above, so 404 are
+# available and 450 is too many.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "METR",
+  "side": "SELL",
+  "type": "MARKET",
+  "size": 450
+}
+
+### MARKET order by size on an instrument without a market price
+# 201, "status": "REJECTED", "rejectionReason": "NO_MARKET_PRICE", "price": null
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PGR",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 1
+}
+
+### MARKET order by amount on an instrument without a market price
+# 422 NO_PRICE_FOR_AMOUNT. Nothing is stored: there is no size to record.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PGR",
+  "side": "BUY",
+  "type": "MARKET",
+  "amount": 1000
+}
+
+
+# ---------------------------------------------------------------------------
+# Idempotency (spec 4.3, ADR 0004)
+# ---------------------------------------------------------------------------
+
+### Order with an Idempotency-Key
+# First time: 201 FILLED. Send it again: 200 with the same order id, and no
+# second order is created.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Idempotency-Key: demo-order-001
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 1
+}
+
+### The same key with a different body
+# 422 IDEMPOTENCY_KEY_REUSED
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Idempotency-Key: demo-order-001
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 2
+}
+
+
+# ---------------------------------------------------------------------------
+# Requests that are not valid orders: an error, and nothing stored
+# ---------------------------------------------------------------------------
+
+### LIMIT without a price
+# 400 VALIDATION_ERROR
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "LIMIT",
+  "size": 10
+}
+
+### Unknown field
+# 400 VALIDATION_ERROR
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 1,
+  "note": "x"
+}
+
+### Unknown user
+# 404 USER_NOT_FOUND
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": 999,
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 1
+}
+
+### The cash instrument as an asset
+# 400 INVALID_INSTRUMENT. Cash moves through POST /transfers.
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "ARS",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 1
+}
+
+### An amount that buys less than one share
+# 422 AMOUNT_BELOW_ONE_SHARE: PAMP is at 925.85
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "MARKET",
+  "amount": 100
+}
+
+### An order above the value cap
+# 422 ORDER_VALUE_TOO_LARGE: 200000 x 1502.80 is above 99,999,999.99
+POST {{baseUrl}}/orders
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "ticker": "BMA",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 200000
+}
+
+
+# ---------------------------------------------------------------------------
+# Cancel (spec 4.4)
+# ---------------------------------------------------------------------------
+
+### Cancel the LIMIT BUY sent above
+# 200 CANCELLED, and its 9000 are available again. The id comes from the
+# "limitBuy" request, so send that one first. Send this one twice and the
+# second answer is 409 ORDER_NOT_CANCELLABLE.
+POST {{baseUrl}}/orders/{{limitBuy.response.body.id}}/cancel
+Content-Type: application/json
+
+{
+  "userId": {{userId}}
+}
+
+### Cancel an order that is not NEW
+# 409 ORDER_NOT_CANCELLABLE: order 2 of the seed is FILLED
+POST {{baseUrl}}/orders/2/cancel
+Content-Type: application/json
+
+{
+  "userId": {{userId}}
+}
+
+### Cancel another user's order
+# 404 ORDER_NOT_FOUND, the same as an order that does not exist: order 5
+# belongs to user 1
+POST {{baseUrl}}/orders/5/cancel
+Content-Type: application/json
+
+{
+  "userId": 2
+}
+
+
+# ---------------------------------------------------------------------------
+# List orders (spec 4.5)
+# ---------------------------------------------------------------------------
+
+### All orders of user 1, newest first
+# 200: the first 20
+GET {{baseUrl}}/orders?userId={{userId}}
+
+### Open orders only
+# 200: the LIMIT SELL sent above and the two open LIMIT BUY orders of the seed
+GET {{baseUrl}}/orders?userId={{userId}}&status=NEW
+
+### Paged
+# 200: the three newest
+GET {{baseUrl}}/orders?userId={{userId}}&limit=3&offset=0
+
+### Invalid status
+# 400 VALIDATION_ERROR
+GET {{baseUrl}}/orders?userId={{userId}}&status=DONE
+
+
+# ---------------------------------------------------------------------------
+# Transfers (spec 4.6)
+# ---------------------------------------------------------------------------
+
+### Deposit
+# 201 FILLED: an order on the cash instrument (ARS), size 50000 at price 1.
+# With the key, sending it again answers 200 and deposits nothing more.
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: demo-deposit-001
+
+{
+  "userId": {{userId}},
+  "side": "CASH_IN",
+  "amount": 50000
+}
+
+### Withdrawal
+# 201 FILLED
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "side": "CASH_OUT",
+  "amount": 20000
+}
+
+### Withdrawal above the available cash
+# 201, "status": "REJECTED", "rejectionReason": "INSUFFICIENT_FUNDS"
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+
+{
+  "userId": {{userId}},
+  "side": "CASH_OUT",
+  "amount": 99999999
+}
+
+### Portfolio after the walk-through
+# 200. cashBalance 790414.65, reservedCash 125500, availableBalance 664914.65,
+# totalAccountValue 934784, METR 504, PAMP 31.
+GET {{baseUrl}}/users/{{userId}}/portfolio
+
+
+# ---------------------------------------------------------------------------
+# Errors and the request id (spec 2)
+# ---------------------------------------------------------------------------
+
+### Unknown route, with a request id supplied by the client
+# 404 NOT_FOUND in the one error shape. The response carries the same
+# X-Request-Id, and so does the log line.
+GET {{baseUrl}}/nope
+X-Request-Id: my-trace-1

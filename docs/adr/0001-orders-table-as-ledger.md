@@ -44,6 +44,17 @@ Only `FILLED` orders count towards cash and positions (FR-P4). `NEW` orders do n
 - Bad history is tolerated on read and blocked on write. The seed I rebuilt from the brief has one case: user 1 bought 20 shares of instrument 31 and sold 30. The replay keeps the cash effect of every `FILLED` order, lets the quantity go negative (it is the net of `size`, as the brief says), never lets the cost go below zero, and the portfolio does not list a non-positive position. The exact cost rule is in [0007](0007-return-definitions.md). The write path is what must prevent new cases.
 - The `(userId, status)` index keeps the read to one user's rows; rejected and cancelled orders do not enter the replay.
 
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [U4](../../tests/accountState.test.ts) | Cash, reserved cash and positions of the seed user, rebuilt by replay |
+| [U3](../../tests/accountState.test.ts) | Bad history is tolerated on read: an oversold position goes negative, its cost stays at zero |
+| [P1](../../tests/portfolio.test.ts) | The portfolio is that replay, field by field, and the oversold instrument is not listed |
+| [O1](../../tests/orders.test.ts), [T1](../../tests/transfers.test.ts) | A fill and a transfer are rows in `orders`, and the next read of the balance shows them |
+
 ## Revisit when
 
 - A user's order count makes the replay noticeable in order submission latency, or lock wait time shows up in metrics.

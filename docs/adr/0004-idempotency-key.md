@@ -53,6 +53,21 @@ In production the header becomes mandatory (`400 IDEMPOTENCY_KEY_REQUIRED`). It 
 - Without a key there is still no protection. Until the key is mandatory this is a documented gap, not a solved problem.
 - The canonical form of the request has to be defined once and tested, or equal requests will hash differently.
 
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [I1](../../tests/idempotency.test.ts), [I2](../../tests/idempotency.test.ts) | The table above: same key and same request is `200` with the stored order; a different request is `422` |
+| [I7](../../tests/idempotency.test.ts) | The fingerprint covers the request: an `amount` order replays after the price changed |
+| [I3](../../tests/idempotency.test.ts) | A rejected order keeps its key, even after a deposit |
+| [I4](../../tests/idempotency.test.ts) | A request that stored nothing stored no key |
+| [I5](../../tests/idempotency.test.ts) | The key is unique per user |
+| [I6](../../tests/idempotency.test.ts) | The check runs inside the lock |
+| [I8](../../tests/idempotency.test.ts) | The accepted form of the key |
+| [T1](../../tests/transfers.test.ts) | The same rules on `POST /transfers` |
+
 ## Revisit when
 
 - A client needs to retry a rejected order with the same key. That would call for a time-limited key or an explicit "retry" operation.
