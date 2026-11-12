@@ -26,7 +26,7 @@ Clients are first-party applications that read the response body. They do not re
 | Unknown user or instrument | No | 404 | `USER_NOT_FOUND`, `INSTRUMENT_NOT_FOUND` |
 | `amount` buys less than one share | No | 422 | `AMOUNT_BELOW_ONE_SHARE` |
 | `amount` given but there is no price to convert it | No | 422 | `NO_MARKET_PRICE` |
-| Order value above the cap (ADR 0006, planned) | No | 422 | `ORDER_VALUE_TOO_LARGE` |
+| Order value above the cap ([0006](0006-integer-cents-and-order-value-cap.md)) | No | 422 | `ORDER_VALUE_TOO_LARGE` |
 | Same idempotency key, different request ([0004](0004-idempotency-key.md)) | No | 422 | `IDEMPOTENCY_KEY_REUSED` |
 
 The status code answers "was the resource created?". The `status` field of the order answers "what happened to it?". A rejected order has an id, appears in the order list and can be audited, so it was created.
