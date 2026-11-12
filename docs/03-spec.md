@@ -262,6 +262,7 @@ src/
   errors.ts          AppError(status, code, message)
 db/                  database.sql, migrations/
 tests/               functional tests against a real PostgreSQL; unit tests for the pure modules
+requests.http        the request collection: one example per endpoint and per outcome
 ```
 
 Configuration by environment variables: `PORT`, `DATABASE_URL`, and `TEST_ADMIN_URL` for the tests. Docker Compose starts PostgreSQL 16 with the base file and the migration applied. The test run creates and drops its own database.
@@ -385,6 +386,7 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | `price` of zero | Refused with `400`. An `amount` of zero is not: it buys less than one share, so it is the `422` of step 8 |
 | Market `close` of zero or below | Not a price for an order: the outcome of step 7. It cannot fill an order and cannot divide an `amount` |
 | `SELL` by `amount` | Allowed, same `floor(amount / price)` rule as `BUY` |
+| Request collection (NFR-6) | One REST Client file, `requests.http`, at the root. It is plain text, so it is reviewed in a pull request like code and reads as documentation without any tool. It is a walk-through on the fresh seed, with the expected outcome above each request. The README repeats the three endpoints of the brief as `curl` |
 
 ## 10. Not in this spec
 
