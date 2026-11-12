@@ -25,8 +25,9 @@ Rules for whoever implements it, person or assistant:
 | Percentages | Numbers with two decimals, already multiplied by 100 (`18.18` means 18.18%), rounded half away from zero. `null` when undefined |
 | Ids | Positive 32-bit integers |
 | Dates | ISO 8601, UTC |
-| Request id | Every response carries `X-Request-Id`. An incoming `X-Request-Id` is reused, otherwise one is generated. It is in every log line |
-| Logs | One JSON line per request: `requestId`, `method`, `path`, `status`, `durationMs` |
+| Request id | Every response carries `X-Request-Id`. An incoming one is reused when it is a plain token (`^[\w.-]{8,100}$`); otherwise one is generated. It is in every log line |
+| Logs | One JSON line per request: `requestId`, `method`, `path`, `status`, `durationMs`. `path` is the route without the query string |
+| Body size | At most 10 kB. Above it, `400 VALIDATION_ERROR` with a message that says the body is too large |
 | Errors | Always `{ "error": { "code": "...", "message": "..." } }`. Clients switch on `code` |
 | Unknown fields | Refused with `400 VALIDATION_ERROR` |
 | NUL character | A `q` or `ticker` containing U+0000 is refused with `400 VALIDATION_ERROR` |
@@ -128,7 +129,7 @@ Rules:
 
 - `totalAccountValue = cashBalance + sum of marketValue`. Reserved cash is not subtracted.
 - Only positions with `quantity > 0` are listed, ordered by `marketValue` descending.
-- `marketPrice` is the latest non-null `close`. `marketValue = quantity x marketPrice`, computed in `BigInt` and checked with `Number.isSafeInteger`.
+- `marketPrice` is the latest `close` above zero. A `close` of zero or below is no price, the same as a missing row. `marketValue = quantity x marketPrice`, computed in `BigInt` and checked with `Number.isSafeInteger`.
 - `averageCost = cost / quantity`, rounded to the cent.
 - `totalReturnPercent = (marketValue - cost) / cost x 100`. `null` when cost is zero.
 - `dailyReturnPercent = (close - previousClose) / previousClose x 100`. `null` when `previousClose` is null or zero.
@@ -307,7 +308,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | O4 | LIMIT is stored `NEW` and reduces `availableBalance`, not `cashBalance` | FR-O4, ADR 0002 |
 | O5 | BUY above available cash is stored `REJECTED`, `INSUFFICIENT_FUNDS`, 201 | FR-O7 |
 | O6 | SELL above shares held, and SELL of shares reserved by an open LIMIT SELL, are `REJECTED`, `INSUFFICIENT_SHARES` | FR-O7, ADR 0002 |
-| O7 | No market price: `size` gives a stored `REJECTED` with null price; `amount` gives 422 `NO_PRICE_FOR_AMOUNT` | ADR 0005 |
+| O7 | No market price: `size` gives a stored `REJECTED` with null price, which survives the list and the replay; `amount` gives 422 `NO_PRICE_FOR_AMOUNT` | ADR 0005 |
 | O8 | Above the cap: 422, nothing stored. Exactly at the cap: accepted | ADR 0006 |
 | O9 | Validation: LIMIT without price, MARKET with price, both or neither of `size`/`amount`, three decimals, unknown field | FR-O4 |
 | O10 | Unknown user, unknown instrument: 404. Cash instrument: 400 | ADR 0005 |
@@ -318,7 +319,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | Id | Test | Source |
 | --- | --- | --- |
 | I1 | Same key, same body: 200, same order id, one row | ADR 0004 |
-| I2 | Same key, different body: 422, one row | ADR 0004 |
+| I2 | Same key, different body: 422, one row. The key namespace is shared by orders and transfers | ADR 0004 |
 | I3 | A rejected order replays as the same rejection, even after a deposit | ADR 0004 |
 | I4 | A request that failed with 4xx stored no key: the fixed request with the same key succeeds | ADR 0004 |
 | I5 | Same key from two users gives two orders | ADR 0004 |
@@ -330,21 +331,24 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 
 | Id | Test | Source |
 | --- | --- | --- |
-| C1 | Cancel a `NEW` order: 200, `CANCELLED`, reserved cash released | FR-O8 |
+| C1 | Cancel a `NEW` order: 200, `CANCELLED`, and the reserved cash or shares are released | FR-O8 |
 | C2 | Cancel a `FILLED`, `REJECTED` or `CANCELLED` order: 409. Another user's order: 404 | FR-O8 |
-| L1 | Lists a user's orders newest first, filtered by `status`, paged. `userId` is required; an invalid `status`, `limit` or `offset` is 400. A user that does not exist gets an empty array | 4.5 |
+| L1 | Lists a user's orders newest first, filtered by `status`, paged, 20 by default; `userId` is required; an invalid `status`, `limit` or `offset` is 400. A user that does not exist gets an empty array | 4.5 |
 | T1 | `CASH_IN` raises the balance by `amount`; `CASH_OUT` lowers it | FR-O9 |
-| T2 | `CASH_OUT` above available cash is stored `REJECTED` | Q12 |
+| T2 | `CASH_OUT` above available cash is stored `REJECTED` and replays as the same rejection; two simultaneous withdrawals that fit once give one `FILLED` and one `REJECTED` | Q12 |
 | P1 | Seed portfolio equals the example in 4.1, field by field: total 904,784.00, two positions, instrument 31 not listed | FR-P1 to FR-P5 |
 | P2 | Position without a market price: valued at cost, returns `null`, `priceAvailable: false` | ADR 0007 |
 | P3 | Unknown user 404, bad id 400 | |
+| P4 | A `close` of zero is no price: the position is valued at cost, both returns are `null` and `priceAvailable` is false | ADR 0007 |
+| P5 | `averageCost` rounds to the cent: a cost of 3,001 cents over 3 shares gives 10.00 | FR-P3 |
 | S1 | Finds by ticker and by name, ignoring case | FR-S1, FR-S2 |
 | S2 | Ranking: exact ticker before prefix before name | Q7 |
 | S3 | Cash is not returned; `%` and `_` are literal; `q` is required; page size is capped | Q7 |
+| S4 | Two instruments with one ticker: search ties them by id, and the ticker lookup takes the lowest id | section 9 |
 | H1 | Health is 200 with the database up | ADR 0008 |
-| D1 | The base file and the migration apply to an empty database, the migration can run twice, and the constraints refuse an invalid order | NFR-5 |
+| D1 | The base file and the migration apply to an empty database, the migration can run twice, and the constraints refuse an invalid `side`, `size`, `type`, `status` and a duplicate idempotency key | NFR-5 |
 | E1 | Every error has the one shape, an unexpected error never shows internals, and every response has `X-Request-Id` (an incoming one is reused) | ADR 0005, 0008 |
-| E2 | A request that waits longer than the lock timeout is answered `503 BUSY` | ADR 0003, 0008 |
+| E2 | A request that waits longer than the lock timeout, and a statement through the pool above the statement timeout, are answered `503 BUSY` | ADR 0003, 0008 |
 | E3 | An unknown query field is `400 VALIDATION_ERROR` on every route, including the ones with no query contract: health, portfolio, `POST /orders`, cancel and transfers | section 2, section 9 |
 
 ## 8. Order of work
