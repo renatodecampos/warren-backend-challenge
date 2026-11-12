@@ -1,12 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Portfolio } from '../src/portfolio';
-import { api, expectError, pool } from './helpers';
+import { api, CASH, createUser, expectError, insertFilled, pool } from './helpers';
 
 afterAll(() => pool.end());
 
 /** Seed instruments. PAMP's latest close is 925.85. */
 const PAMP = 47;
-const CASH = 66;
 /** No row in `marketdata`. */
 const UNPRICED = 3;
 /** Priced in the seed; this file gives each a later close that only these tests read. */
@@ -21,24 +20,6 @@ beforeAll(async () => {
     [ZERO_CLOSE, ONE_CENT],
   );
 });
-
-/** A new user whose only history is a deposit of `cash` whole pesos. */
-async function createUser(cash: number): Promise<number> {
-  const created = await pool.query<{ id: number }>(
-    `INSERT INTO users (email, accountnumber) VALUES ('orders@test.com', '30001') RETURNING id`,
-  );
-  const userId = created.rows[0]!.id;
-  if (cash > 0) await insertFilled(userId, CASH, 'CASH_IN', cash, 1);
-  return userId;
-}
-
-async function insertFilled(userId: number, instrumentId: number, side: string, size: number, price: number) {
-  await pool.query(
-    `INSERT INTO orders (instrumentid, userid, side, size, price, status, type, datetime)
-     VALUES ($1, $2, $3, $4, $5, 'FILLED', 'MARKET', TIMESTAMP '2023-07-12 10:00:00')`,
-    [instrumentId, userId, side, size, price],
-  );
-}
 
 interface StoredOrder {
   id: number;
