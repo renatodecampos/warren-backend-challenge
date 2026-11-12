@@ -168,13 +168,15 @@ The schema was rebuilt from the brief, so these are my additions and differences
 
 Ordered by what I would do first. Each has a trigger, so nothing is built ahead of need.
 
+CI was on this list, with the trigger "before a second engineer joins". It is built instead ([03 Spec, section 6](03-spec.md#guard-rails)): the code is written with an AI assistant, so the second contributor is already here.
+
 | Step | Trigger |
 | --- | --- |
 | Authentication and authorisation | Before any real client. `userId` in the body lets anyone trade for anyone |
 | Idempotency key mandatory | Same moment |
 | Rate limiting per user and per IP at the gateway | Before public exposure |
 | Metrics, traces and alerts: order latency, rejection rate, lock wait | Before production; the triggers below cannot be observed without them |
-| CI running the tests and an OpenAPI contract | Before a second engineer joins |
+| An OpenAPI contract | Before a second engineer joins |
 | LIMIT execution job, taking the same per-user lock | When the product needs LIMIT orders to fill |
 | Materialised balances and positions | Replay or lock wait visible in latency |
 | Read replica and cache for market data and search | Read load competes with order writes |
