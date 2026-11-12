@@ -26,7 +26,7 @@ Instructions for an AI assistant working in this repository. Short on purpose: t
 - Money is integer cents; `cost x sold` and `quantity x close` are `BigInt` ([ADR 0006](docs/adr/0006-integer-cents-and-order-value-cap.md)). No floats in arithmetic.
 - Every write that changes a user's cash or shares takes the per-user lock first ([ADR 0003](docs/adr/0003-per-user-row-lock.md)).
 
-The first three are also enforced by `.claude/settings.json`, and all of it by CI.
+The hard limits below are also enforced by `.claude/settings.json`; CI runs `npm run check` on every pull request.
 
 ## Commands
 
