@@ -12,7 +12,12 @@ The brief leaves several things open. Instead of guessing silently, each record 
 | [0006](0006-integer-cents-and-order-value-cap.md) | Money is handled as integer cents, with a cap on order value | Accepted |
 | [0007](0007-return-definitions.md) | Returns: total at average cost, daily per position | Accepted |
 | [0008](0008-nfr-assumptions-and-production-path.md) | Non-functional assumptions and the path to production | Accepted |
+| [0009](0009-stack-and-data-access.md) | Stack: TypeScript, Express, SQL through `pg`, tests against a real PostgreSQL | Accepted |
+
+If you read only three, read [0002](0002-open-limit-orders-reserve-funds.md), [0003](0003-per-user-row-lock.md) and [0005](0005-rejected-orders-are-stored.md). They are the ones where another reasonable engineer would have built something different.
 
 ## Format
 
 Every record has the same sections: Context, Assumption, Decision, Alternatives considered, Consequences, Revisit when. The header links to the requirements and the design section it comes from.
+
+These records were written before the code. Where one names a test, the test does not exist yet; the link to the test file is added when the code lands.
