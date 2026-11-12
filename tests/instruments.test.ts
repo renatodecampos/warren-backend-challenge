@@ -127,4 +127,8 @@ describe('GET /instruments', () => {
   it('4.2: an unknown query field is 400 VALIDATION_ERROR', async () => {
     expectError(await api.get('/instruments').query({ q: 'a', sort: 'name' }), 400, 'VALIDATION_ERROR');
   });
+
+  it('4.2: a NUL in q is 400 VALIDATION_ERROR', async () => {
+    expectError(await api.get('/instruments').query({ q: '\u0000' }), 400, 'VALIDATION_ERROR');
+  });
 });

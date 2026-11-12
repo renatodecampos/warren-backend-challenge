@@ -355,6 +355,7 @@ describe('POST /orders', () => {
       ['both instrumentId and ticker', { ...market, ticker: 'PAMP' }],
       ['neither instrumentId nor ticker', { ...market, instrumentId: undefined }],
       ['an empty ticker', { ...market, instrumentId: undefined, ticker: '' }],
+      ['a ticker with a NUL', { ...market, instrumentId: undefined, ticker: '\u0000' }],
       ['a ticker of 11 characters', { ...market, instrumentId: undefined, ticker: 'ABCDEFGHIJK' }],
       ['a size of zero', { ...market, size: 0 }],
       ['a negative size', { ...market, size: -1 }],

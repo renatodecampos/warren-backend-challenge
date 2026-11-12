@@ -5,13 +5,29 @@ import { Pool, type PoolClient } from 'pg';
  * indefinitely (spec, section 5; ADR 0003).
  */
 export function createPool(connectionString: string): Pool {
-  return new Pool({
+  const pool = new Pool({
     connectionString,
     max: 10,
     connectionTimeoutMillis: 3_000,
     lock_timeout: 2_000,
     statement_timeout: 5_000,
   });
+
+  // An idle client can lose its connection. Without a listener, EventEmitter rethrows the
+  // error and the process exits; logging it lets the pool discard the client and recover
+  // (ADR 0008).
+  pool.on('error', (error) => {
+    if (process.env.NODE_ENV === 'test') return;
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        message: 'A database client connection failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  });
+
+  return pool;
 }
 
 /**

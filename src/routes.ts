@@ -17,6 +17,9 @@ const id = z
 /** A whole number written in plain digits, as a query string carries it. */
 const digits = z.string().regex(/^\d{1,10}$/, 'must be a whole number').transform(Number);
 
+/** PostgreSQL cannot store a NUL in text; refuse it before it reaches the database. */
+const noNul = (value: string): boolean => !value.includes('\u0000');
+
 /** Paging, the same for every list (spec, section 4.2). */
 const paging = {
   limit: digits.refine((value) => value >= 1 && value <= 100, 'must be between 1 and 100').default(20),
@@ -24,7 +27,7 @@ const paging = {
 };
 
 const searchQuery = z.strictObject({
-  q: z.string().trim().min(1).max(100),
+  q: z.string().trim().min(1).max(100).refine(noNul, 'must not contain a NUL character'),
   ...paging,
 });
 
@@ -44,7 +47,7 @@ const orderBody = z
   .strictObject({
     userId: bodyId,
     instrumentId: bodyId.optional(),
-    ticker: z.string().min(1).max(10).optional(),
+    ticker: z.string().min(1).max(10).refine(noNul, 'must not contain a NUL character').optional(),
     side: z.enum(['BUY', 'SELL']),
     type: z.enum(['MARKET', 'LIMIT']),
     size: z.number().int().min(1).max(MAX_ORDER_SIZE).optional(),

@@ -29,6 +29,7 @@ Rules for whoever implements it, person or assistant:
 | Logs | One JSON line per request: `requestId`, `method`, `path`, `status`, `durationMs` |
 | Errors | Always `{ "error": { "code": "...", "message": "..." } }`. Clients switch on `code` |
 | Unknown fields | Refused with `400 VALIDATION_ERROR` |
+| NUL character | A `q` or `ticker` containing U+0000 is refused with `400 VALIDATION_ERROR` |
 
 Internal rule: all arithmetic is in integer cents ([ADR 0006](adr/0006-integer-cents-and-order-value-cap.md)). Requests are converted with `Math.round(value x 100)` after the two-decimal check; responses are converted back at the last step.
 
