@@ -2,7 +2,7 @@
 
 Slice 9 ([spec, section 8](03-spec.md#8-order-of-work)) is the review I would give this code if someone else had written it. It is not a summary of the spec and it is not a list of things that went well. It records how I reviewed, what holds, what I would change, and what I deliberately accept.
 
-Reviewed on 2026-11-12: `development` at `1ff423a` (slices 0 to 7) plus the slice 8 documentation diff (PR #9: `requests.http`, README and ADR links). `npm run check` is green: strict type check, type-aware lint, 11 test files, 205 tests.
+Reviewed on 2026-11-12: `development` at `88a6e50` (slices 0 to 8). I started at `1ff423a` and reviewed slice 8 from its PR; it merged during the review. `npm run check` is green: strict type check, type-aware lint, 11 test files, 205 tests.
 
 ## 1. How I reviewed
 
@@ -43,7 +43,7 @@ The tests run against a real PostgreSQL, not a mock. That is the right choice fo
 
 ### Slice 8, documentation
 
-Slice 8 is documentation only, so it has no test id. I reviewed its diff: `requests.http` is a walk-through with the expected outcome above each request; the examples I spot-checked match the seed (`gas` returns six instruments, `banco&limit=2&offset=1` returns BHIP and BMA, and the walkthrough ends at cash 790,414.65, PAMP 31, METR 504). The README commands match `package.json`. The status line was stale on `development`; PR #9 corrects it to slices 0 to 8, so slice 8 should merge before slice 9.
+Slice 8 is documentation only, so it has no test id. I reviewed its diff: `requests.http` is a walk-through with the expected outcome above each request; the examples I spot-checked match the seed (`gas` returns six instruments, `banco&limit=2&offset=1` returns BHIP and BMA, and the walkthrough ends at cash 790,414.65, PAMP 31, METR 504). The README commands match `package.json`. It merged as `88a6e50`; the README status line now reads slices 0 to 8.
 
 ## 4. Findings
 
@@ -169,7 +169,7 @@ I would not chase 100% coverage. These are the gaps where a failure would change
 - **Test first.** The history shows a `test:` commit before the `feat:` commit for every slice from 1 to 7. Slice 0 is the skeleton and its own harness, where the tests and the infrastructure arrive together; I would not force a red-green split there.
 - **One slice, one branch, one pull request.** The branches in the repository follow the spec's order, and the pull requests stay small enough to review. That is what makes this review possible.
 - **Guard-rails.** `npm run check`, CI against a real PostgreSQL, the protected branches and `.claude/settings.json` are the parts of the process that do not depend on my discipline. They are described in [spec, section 6](03-spec.md#guard-rails).
-- **The slice 8 status line.** On `development`, the README still said slice 0 when I reviewed; slice 8's PR #9 corrects it to slices 0 to 8. Slice 8 is documentation only, so the code review is unaffected, but slice 8 should merge before slice 9.
+- **The slice 8 status line.** Slice 8 merged during the review; the README status line now reads slices 0 to 8. Slice 8 is documentation only, so the code review is unaffected.
 - **This review is documentation only.** The spec gives slice 9 no tests, and a review that edits the code while reviewing it cannot be reviewed as a review. The findings above have proposed changes and proposed tests; they belong in a follow-up pull request, not in this one.
 
 ## 7. What I deliberately accept
