@@ -1,8 +1,10 @@
-import { multiplyExact, proportionRounded } from './money';
+import type { ClientBase } from 'pg';
+import { multiplyExact, proportionRounded, toCents } from './money';
 
 /**
  * The state of one account, rebuilt from its orders (spec, section 3; ADR 0001, 0002, 0007).
- * Pure: no I/O. The portfolio and every write share this one function.
+ * `replay` is pure: no I/O. The portfolio and every write share it. `loadAccountState`, at the
+ * end, is the only I/O here: the two queries that feed it.
  */
 
 export interface FilledOrder {
@@ -108,4 +110,41 @@ export function availableCashCents(state: AccountState): number {
 export function availableShares(state: AccountState, instrumentId: number): number {
   const position = state.positions.get(instrumentId);
   return position ? position.quantity - position.reservedQuantity : 0;
+}
+
+interface OrderRow {
+  instrumentid: number;
+  side: string;
+  size: number;
+  price: string;
+}
+
+/**
+ * Reads the two inputs of `replay` for one user. The caller chooses the transaction: a read
+ * snapshot for the portfolio, the per-user lock for a write (ADR 0003).
+ */
+export async function loadAccountState(client: ClientBase, userId: number): Promise<AccountState> {
+  const filled = await client.query<OrderRow>(
+    `SELECT instrumentid, side, size, price FROM orders
+      WHERE userid = $1 AND status = 'FILLED'
+      ORDER BY datetime, id`,
+    [userId],
+  );
+  const open = await client.query<OrderRow>(
+    `SELECT instrumentid, side, size, price FROM orders
+      WHERE userid = $1 AND status = 'NEW'`,
+    [userId],
+  );
+
+  const toOrder = <Side extends string>(row: OrderRow) => ({
+    instrumentId: row.instrumentid,
+    side: row.side as Side,
+    size: row.size,
+    priceCents: toCents(Number(row.price)),
+  });
+
+  return replay(
+    filled.rows.map((row) => toOrder<FilledOrder['side']>(row)),
+    open.rows.map((row) => toOrder<OpenOrder['side']>(row)),
+  );
 }
