@@ -114,7 +114,8 @@ async function insertOrder(
 
 export async function submitOrder(pool: Pool, request: OrderRequest): Promise<Order> {
   return transaction(pool, async (client) => {
-    const user = await client.query('SELECT id FROM users WHERE id = $1', [request.userId]);
+    // The per-user lock: ADR 0003.
+    const user = await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [request.userId]);
     if (user.rowCount === 0) {
       throw new AppError(404, 'USER_NOT_FOUND', `User ${request.userId} does not exist`);
     }

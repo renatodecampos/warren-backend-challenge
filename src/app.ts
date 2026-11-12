@@ -44,6 +44,13 @@ function isUnreadableBody(err: unknown): boolean {
   return typeof err.status === 'number' && err.status >= 400 && err.status < 500;
 }
 
+/** PostgreSQL's `lock_not_available` and `query_canceled`: what `lock_timeout` and `statement_timeout` raise. */
+const TIMEOUT_CODES = new Set(['55P03', '57014']);
+
+function isDatabaseTimeout(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && TIMEOUT_CODES.has(String(err.code));
+}
+
 /** Turns every failure into the one error shape. Anything unexpected is logged, never shown. */
 export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
   if (err instanceof ZodError) {
@@ -57,6 +64,10 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
   }
   if (isUnreadableBody(err)) {
     res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The request body is not valid JSON' } });
+    return;
+  }
+  if (isDatabaseTimeout(err)) {
+    res.status(503).json({ error: { code: 'BUSY', message: 'The server is busy; retry the request' } });
     return;
   }
   log('error', {
