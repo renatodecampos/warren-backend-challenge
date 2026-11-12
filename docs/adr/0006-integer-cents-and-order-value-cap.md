@@ -32,7 +32,7 @@ Integers fix this, but only up to a point. JavaScript numbers are exact for inte
 - The cap is checked **before** any other arithmetic with the product. Above 9 x 10^15 the multiplication itself is inexact, but such a value is far above the cap, so the comparison is still right.
 - With the cap, a single order is at most 10^10 cents, so an account would need about 900,000 maximum-value orders before a running sum approaches the safe-integer limit.
 - The cap bounds `size x price` of one order and the sums built from it. It does **not** bound two other products, so these are computed in `BigInt`:
-  - `cost x sold` in the average-cost step of a partial sale ([0007](0007-return-definitions.md)). A position that cost 50 million pesos (5 x 10^9 cents) with 2,000,000 shares sold gives 10^16, above the limit, with every input valid. The result of the division is never larger than `cost`, so it goes back to a number safely. Passing the limit does not make every result wrong: the float error only shows when the exact value sits next to half a cent. Test U5 pins one such case, a position that cost 544,905,518.45 pesos where floats remove one cent too many.
+  - `cost x sold` in the average-cost step of a partial sale ([0007](0007-return-definitions.md)). A position that cost 50 million pesos (5 x 10^9 cents) with 2,000,000 shares sold gives 10^16, above the limit, with every input valid. The result of the division is never larger than `cost`, so it goes back to a number safely. Passing the limit does not make every result wrong: the float error only shows when the exact value sits next to half a cent. Test [U5](../../tests/money.test.ts) pins one such case, a position that cost 544,905,518.45 pesos where floats remove one cent too many.
   - `quantity x close` for the value of a position. The quantity is a sum over several orders and `close` can be far above the prices paid. The result is converted back with a `Number.isSafeInteger` check, and the request fails loudly instead of returning a wrong value.
 - For a MARKET order the price is only known after reading the latest `close`, so the cap is checked in the service, not in the request schema.
 
@@ -53,6 +53,17 @@ Integers fix this, but only up to a point. JavaScript numbers are exact for inte
 - The cap is a technical placeholder, not a business rule. A real per-order limit is a product and risk decision, and it would replace this constant. Raising it is cheap: each factor of 10 divides the headroom for sums by 10 (90,000 maximum-value orders at 10^11 cents).
 - The value is not large for a broker, and inflation makes it smaller in real terms every year. A deposit or an order of 100 million pesos is refused. Two of 99,999,999.99 are fine, so a client that needs more must split, which is a contract detail to state in the API documentation.
 - The cap needs a test on each side: exactly at the limit is accepted, one cent above is refused, and an absurd `size x price` is refused without being stored.
+
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [U7](../../tests/money.test.ts) | The two-decimal check and the conversion to cents, without float drift |
+| [U6](../../tests/money.test.ts), [O8](../../tests/orders.test.ts) | The cap on each side: at the limit accepted, one cent above refused, an absurd product refused and not stored |
+| [U5](../../tests/money.test.ts) | `cost x sold` and `quantity x close` above the safe-integer limit are exact, or fail loudly |
+| [O2](../../tests/orders.test.ts) | Buying by `amount` stores `floor(amount / price)` shares |
 
 ## Revisit when
 

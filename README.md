@@ -2,7 +2,7 @@
 
 A small trading API: **portfolio**, **asset search** and **order submission** (MARKET and LIMIT), on Node.js, TypeScript, Express and PostgreSQL.
 
-**Status: slice 0 done, of slices 0 to 9.** The requirements, the design, the decision records and the spec are complete. The code is written from the spec, test first, one slice at a time ([spec, section 8](docs/03-spec.md#8-order-of-work)). In place so far: the project skeleton, the database with its migration, the health endpoint, the error contract and the guard-rails. The three endpoints of the brief come in the next slices.
+**Status: slices 0 to 8 done, of slices 0 to 9.** The API is complete: the three endpoints of the brief, plus cancel, order list and transfers, written from the spec, test first, one slice at a time ([spec, section 8](docs/03-spec.md#8-order-of-work)). What is left is slice 9, the review of my own code.
 
 ## The three decisions that matter
 
@@ -31,6 +31,7 @@ None of these blocked the work: each has a written assumption and a trigger to r
 | 3 | [Design](docs/02-design.md) | The picture, the assumption for each open point, the options weighed, the schema changes |
 | 4 | [Decision records](docs/adr/README.md) | One record per decision: assumption, alternatives, consequences, when to revisit |
 | 5 | [Spec](docs/03-spec.md) | Exactly what is built: endpoint contracts, rules, schema changes, the test list and the order of work |
+| 6 | [Request collection](requests.http) | One example per endpoint and per outcome, with the expected answer above each |
 
 Short on time: this page, then the three records above.
 
@@ -42,14 +43,66 @@ Requirements: Node 20+ and Docker.
 npm install
 npm run db:up        # PostgreSQL 16 with db/database.sql and the migration applied
 npm run dev          # http://localhost:3000
-npm run check        # type check + lint + tests
 ```
 
-The defaults match `docker-compose.yml`, so nothing else is needed. To change them, set the variables in `.env.example`. The tests create and drop their own database (`warren_challenge_test`) and never touch the development one.
+| Command | What it does |
+| --- | --- |
+| `npm run check` | Type check, lint and the whole suite: the definition of done |
+| `npm test` | The suite only. It needs the database server up (`npm run db:up`) |
+| `npm run db:reset` | Drops the volume and starts again from the seed |
+| `npm run build`, `npm start` | Compiles to `dist/` and runs it without the watcher |
+
+The defaults match `docker-compose.yml`, so nothing else is needed. To change them, set `PORT`, `DATABASE_URL` and `TEST_ADMIN_URL` in the environment; `.env.example` has the default values. The tests create and drop their own database (`warren_challenge_test`) and never touch the development one.
 
 No Docker? Point `DATABASE_URL` and `TEST_ADMIN_URL` to any PostgreSQL 13+ and run `db/database.sql`, then `db/migrations/001_constraints_indexes.sql`, on an empty database.
 
 The stack is described in [ADR 0009](docs/adr/0009-stack-and-data-access.md).
+
+## Calling it
+
+[`requests.http`](requests.http) is the collection: every endpoint, with one request per outcome and the expected answer above each. It is in REST Client format, so in VS Code with the REST Client extension each request has a "Send Request" link. It is written as a walk-through on the fresh seed.
+
+The three endpoints of the brief, with `curl`:
+
+```bash
+# Portfolio: account value, cash, and each position with its returns
+curl http://localhost:3000/users/1/portfolio
+
+# Asset search, by ticker or name
+curl 'http://localhost:3000/instruments?q=pamp'
+
+# Order: a MARKET BUY of 10 PAMP
+curl -X POST http://localhost:3000/orders \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 7b1c2f0e-readme-example' \
+  -d '{"userId": 1, "ticker": "PAMP", "side": "BUY", "type": "MARKET", "size": 10}'
+```
+
+The order answers `201` with:
+
+```json
+{
+  "id": 12,
+  "userId": 1,
+  "instrumentId": 47,
+  "ticker": "PAMP",
+  "side": "BUY",
+  "type": "MARKET",
+  "size": 10,
+  "price": 925.85,
+  "status": "FILLED",
+  "rejectionReason": null,
+  "datetime": "2026-11-12T14:03:22.000Z"
+}
+```
+
+Three things a client has to know, each from a decision record:
+
+- **Read `status`, not only the status code.** An order the market refuses (not enough cash, not enough shares, no price) is stored and answered with `201` and `"status": "REJECTED"`, with the cause in `rejectionReason` ([ADR 0005](docs/adr/0005-rejected-orders-are-stored.md)).
+- **Send an `Idempotency-Key` to retry safely.** The same key with the same body answers `200` with the original order and creates nothing. The header is optional in this version ([ADR 0004](docs/adr/0004-idempotency-key.md)).
+- **One order is worth at most 99,999,999.99 pesos.** Above that the answer is `422 ORDER_VALUE_TOO_LARGE`, and the order has to be split ([ADR 0006](docs/adr/0006-integer-cents-and-order-value-cap.md)).
+
+Errors always have the shape `{ "error": { "code": "...", "message": "..." } }`; the codes are in the [spec, section 2](docs/03-spec.md#error-codes).
 
 ## How it is built
 

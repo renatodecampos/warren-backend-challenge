@@ -75,6 +75,18 @@ Ordered by what I would do first. Each step has the trigger that justifies it, s
 5. Is a per-order value limit a business rule? ([0006](0006-integer-cents-and-order-value-cap.md))
 6. Should open LIMIT orders block cash and shares? ([0002](0002-open-limit-orders-reserve-funds.md))
 
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [E1](../../tests/errors.test.ts) | One error shape, no internals in an unexpected error, a request id on every response |
+| [H1](../../tests/health.test.ts) | The health endpoint checks the database |
+| [D1](../../tests/health.test.ts) | The migration applies, can run twice, and its constraints refuse an invalid order |
+| [O11](../../tests/orders.test.ts), [I1](../../tests/idempotency.test.ts) | The concurrency test and the idempotency cases |
+| [E2](../../tests/errors.test.ts) | The lock and statement timeouts are answered `503 BUSY` |
+
 ## Revisit when
 
 - Real figures for users, peak order rate and history per user are available.

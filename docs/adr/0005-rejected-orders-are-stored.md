@@ -56,6 +56,19 @@ Error responses have one shape, `{ "error": { "code", "message" } }`, so a clien
 - Rejected orders accumulate. They are excluded from the balance replay by status ([0001](0001-orders-table-as-ledger.md)), so they do not slow it down.
 - Every case in the table needs a test, including the boundary between "stored" and "not stored".
 
+## Tests
+
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+
+| Test | What it pins |
+| --- | --- |
+| [O5](../../tests/orders.test.ts), [O6](../../tests/orders.test.ts), [O7](../../tests/orders.test.ts) | The three rejections are stored and answered `201`, each with its `rejectionReason` |
+| [T2](../../tests/transfers.test.ts) | A `CASH_OUT` above the available balance follows the same rule |
+| [O3](../../tests/orders.test.ts), [O7](../../tests/orders.test.ts), [O8](../../tests/orders.test.ts) | The 422 cases store nothing, including `amount` without a market price |
+| [O9](../../tests/orders.test.ts), [O10](../../tests/orders.test.ts) | A malformed request, an unknown user or instrument and the cash instrument store nothing |
+| [I3](../../tests/idempotency.test.ts) | A rejected request replays as the stored rejection |
+| [E1](../../tests/errors.test.ts) | Every error has the one shape |
+
 ## Revisit when
 
 - The API is opened to third parties, where "2xx means it worked" is a common expectation. The first alternative, with the stored order in the body, would then be the safer contract.
