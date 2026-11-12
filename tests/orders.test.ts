@@ -435,4 +435,21 @@ describe('POST /orders', () => {
       expect(stored.rowCount).toBe(1);
     },
   );
+
+  it('O11: 10 simultaneous orders against a balance that fits 3 give 3 FILLED and 7 REJECTED', async () => {
+    // 10 PAMP at 925.85 cost 9,258.50: 30,000 pays for three of them and not for a fourth.
+    const userId = await createUser(30_000);
+    const order = { userId, instrumentId: PAMP, side: 'BUY', type: 'MARKET', size: 10 };
+
+    const responses = await Promise.all(Array.from({ length: 10 }, () => api.post('/orders').send(order)));
+
+    expect(responses.map((res) => res.status)).toEqual(Array<number>(10).fill(201));
+    const stored = await storedOrders(userId);
+    expect(stored.filter((o) => o.status === 'FILLED')).toHaveLength(3);
+    expect(stored.filter((o) => o.status === 'REJECTED')).toHaveLength(7);
+    expect(stored.filter((o) => o.status === 'REJECTED').map((o) => o.rejection_reason)).toEqual(
+      Array<string>(7).fill('INSUFFICIENT_FUNDS'),
+    );
+    expect((await portfolio(userId)).cashBalance).toBe(2224.5);
+  });
 });
