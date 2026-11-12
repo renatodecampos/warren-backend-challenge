@@ -6,6 +6,9 @@
 /** The value of one order, `size x price`, may not exceed 99,999,999.99 pesos. */
 export const MAX_ORDER_VALUE_CENTS = 9_999_999_999;
 
+/** The largest `size` an order can hold: the `INT` column of `orders.size`. */
+export const MAX_ORDER_SIZE = 2_147_483_647;
+
 const PLAIN_AMOUNT = /^\d+(\.\d{1,2})?$/;
 
 /**
@@ -32,6 +35,16 @@ export function fromCents(cents: number): number {
  */
 export function exceedsOrderValueCap(size: number, priceCents: number): boolean {
   return size * priceCents > MAX_ORDER_VALUE_CENTS;
+}
+
+/**
+ * `floor(amount / price)`: the whole shares an amount buys, so the user never spends more than
+ * they asked to. Divided in BigInt, so no amount the schema lets through gives a wrong floor.
+ * An absurd amount gives a size too large to be exact, which is still far above every limit it
+ * is then checked against. `priceCents` is positive.
+ */
+export function sharesForAmount(amountCents: number, priceCents: number): number {
+  return Number(BigInt(amountCents) / BigInt(priceCents));
 }
 
 function toSafeNumber(value: bigint): number {

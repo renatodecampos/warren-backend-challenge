@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { Portfolio } from '../src/portfolio';
 import { api, expectError, pool } from './helpers';
 
 afterAll(() => pool.end());
@@ -57,10 +58,10 @@ async function storedOrders(userId: number): Promise<StoredOrder[]> {
   return found.rows;
 }
 
-async function portfolio(userId: number) {
+async function portfolio(userId: number): Promise<Portfolio> {
   const res = await api.get(`/users/${userId}/portfolio`);
   expect(res.status).toBe(200);
-  return res.body;
+  return res.body as Portfolio;
 }
 
 describe('POST /orders', () => {
