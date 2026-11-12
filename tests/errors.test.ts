@@ -164,6 +164,25 @@ describe('E1: pool errors', () => {
   });
 });
 
+describe('E3: unknown query fields', () => {
+  it.each(['/health', '/users/1/portfolio'] as const)('GET %s?foo=bar is 400 VALIDATION_ERROR', async (path) => {
+    const res = await api.get(`${path}?foo=bar`);
+
+    expectError(res, 400, 'VALIDATION_ERROR');
+    expect(res.body.error.message).toContain('foo');
+  });
+
+  it.each(['/orders', '/orders/1/cancel', '/transfers'] as const)(
+    'POST %s?foo=bar is 400 VALIDATION_ERROR before the body is read',
+    async (path) => {
+      const res = await api.post(`${path}?foo=bar`).send({});
+
+      expectError(res, 400, 'VALIDATION_ERROR');
+      expect(res.body.error.message).toContain('foo');
+    },
+  );
+});
+
 describe('E2: timeouts are 503 BUSY', () => {
   it('an order that waits longer than the lock timeout is 503 BUSY and stores nothing', async () => {
     const created = await pool.query<{ id: number }>(
