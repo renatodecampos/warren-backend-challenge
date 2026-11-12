@@ -25,13 +25,14 @@ Clients are first-party applications that read the response body. They do not re
 | Cash instrument used as an asset | No | 400 | `INVALID_INSTRUMENT` |
 | Unknown user or instrument | No | 404 | `USER_NOT_FOUND`, `INSTRUMENT_NOT_FOUND` |
 | `amount` buys less than one share | No | 422 | `AMOUNT_BELOW_ONE_SHARE` |
-| `amount` given but there is no price to convert it | No | 422 | `NO_MARKET_PRICE` |
+| `amount` given but there is no price to convert it | No | 422 | `NO_PRICE_FOR_AMOUNT` |
 | Order value above the cap ([0006](0006-integer-cents-and-order-value-cap.md)) | No | 422 | `ORDER_VALUE_TOO_LARGE` |
 | Same idempotency key, different request ([0004](0004-idempotency-key.md)) | No | 422 | `IDEMPOTENCY_KEY_REUSED` |
 
 The status code answers "was the resource created?". The `status` field of the order answers "what happened to it?". A rejected order has an id, appears in the order list and can be audited, so it was created.
 
-- A MARKET order given as `size` for an instrument with no market price is stored `REJECTED` (`NO_MARKET_PRICE`). With `amount` there is no `size` to store, so it is a 422.
+- A MARKET order given as `size` for an instrument with no market price is stored `REJECTED` (`NO_MARKET_PRICE`). With `amount` there is no `size` to store, so it is a 422 with its own code, `NO_PRICE_FOR_AMOUNT`. The cause is the same and the contract is not, so the two never share a code: `NO_MARKET_PRICE` only ever appears as the `rejection_reason` of a stored order.
+- That stored order has no price, so `orders.price` stays nullable. It is the only case where `price` is null; every other stored order has one.
 - A `CASH_OUT` above the available balance follows the same rule as a trade: stored `REJECTED`, `INSUFFICIENT_FUNDS`, 201.
 - Repeating a rejected request with the same idempotency key returns the stored rejection with `200` ([0004](0004-idempotency-key.md)).
 - The first 422 cases are not stored because the `size` column cannot be filled: there is no valid order to record. The cap and the key conflict are limits of the API, not answers from the market, so they are treated like validation errors.

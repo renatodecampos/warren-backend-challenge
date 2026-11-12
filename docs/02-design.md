@@ -18,14 +18,18 @@ One stateless service and one database. Correctness lives in the database (trans
 
 ### Data model
 
-The brief describes four tables. The original `database.sql` did not come with the brief, so I rebuilt the schema from that description. Differences from the brief are listed in section 5.
+The brief describes four tables. The original `database.sql` did not come with the brief, so I rebuilt the schema and a seed from that description. My file enters the repository as `db/database.sql`, together with the code. Column types are my choice (`INT` for `size`, `NUMERIC(10,2)` for prices). Differences from the brief are listed in section 5.
+
+If the evaluators run their own `database.sql`, its column names or types may differ from mine. It is the first thing I would confirm with them.
 
 ```
 users(id, email, accountNumber)
 instruments(id, ticker, name, type)            type = 'MONEDA' for the cash instrument (ARS)
-orders(id, instrumentId, userId, side, size, price, type, status, datetime)
-marketdata(id, instrumentId, high, low, open, close, previousClose, date)
+orders(id, instrumentId, userId, side, size INT, price NUMERIC(10,2), type, status, datetime)
+marketdata(id, instrumentId, high, low, open, close, previousClose, date)     prices are NUMERIC(10,2)
 ```
+
+The base file has no `NOT NULL`, no `CHECK` and no index besides the primary keys; those are added by migration (section 5).
 
 `orders` is the ledger: it holds trades, deposits and withdrawals. Nothing else stores a balance.
 
@@ -63,7 +67,7 @@ These are the ambiguities from [01 Requirements, section 4](01-requirements.md#4
 | Q8 | Instrument without a market price | MARKET order is stored `REJECTED` (`NO_MARKET_PRICE`); a position is valued at cost and flagged | [0005](adr/0005-rejected-orders-are-stored.md), [0007](adr/0007-return-definitions.md) | |
 | Q9 | Concurrent orders from one user | One row lock per user around check and insert | [0003](adr/0003-per-user-row-lock.md) | Lock wait shows up in latency |
 | Q10 | The same order sent twice | An `Idempotency-Key` header, unique per user: a repeat returns the stored order | [0004](adr/0004-idempotency-key.md) | |
-| Q11 | Seed user who sold more than they bought | The write path blocks selling shares the user does not hold. Historical rows are read as they are; non-positive positions are not listed | no | |
+| Q11 | Seed user who sold more than they bought | The write path blocks selling shares the user does not hold. Historical rows are read as they are: quantity is the net of `FILLED` sizes and can be negative, cost never goes below zero, and non-positive positions are not listed | [0001](adr/0001-orders-table-as-ledger.md), [0007](adr/0007-return-definitions.md) | |
 | Q12 | `CASH_OUT` limit and decimals | Withdrawal cannot exceed available cash. Whole pesos only, because `size` is an integer | [0005](adr/0005-rejected-orders-are-stored.md), [0006](adr/0006-integer-cents-and-order-value-cap.md) | Cents are needed in transfers |
 | Q13 | Volume, availability, security | See section 3 | [0008](adr/0008-nfr-assumptions-and-production-path.md) | Real figures replace these |
 
@@ -128,7 +132,7 @@ Chosen because the assumed volume allows it and the brief points that way. First
 | Natural key (same user, asset, side, size within N seconds) | No client change | Guesses intent. Blocks legitimate repeated orders |
 | Nothing | No work | A duplicate order moves real money. A correctness gap, not a scaling one |
 
-The key is optional in this version so simple clients keep working, and would be mandatory in production.
+The key is optional in this version so the API can be tried by hand without it, and would be mandatory in production.
 
 ### 4.6 Money representation
 
@@ -142,6 +146,8 @@ The key is optional in this version so simple clients keep working, and would be
 
 Average cost depends on the order of buys and sells, which is awkward in plain SQL, so positions are computed in code from rows read in order. Search ranking and the latest price are done in SQL, close to the indexes.
 
+The framework, the data access strategy and the test approach are in [ADR 0009](adr/0009-stack-and-data-access.md).
+
 ## 5. Changes to the schema
 
 The schema was rebuilt from the brief, so these are my additions and differences, each justified as the brief requires (NFR-5).
@@ -151,7 +157,7 @@ The schema was rebuilt from the brief, so these are my additions and differences
 | `orders.rejection_reason` | A `REJECTED` order should say why |
 | `orders.idempotency_key` with a unique index on `(userId, idempotency_key)` | Retries (4.5). Null for clients that send no key |
 | `orders.request_hash` | Fingerprint of the request, to tell a real retry from a reused key. Needed because `amount` becomes a `size` that depends on the price at that moment ([ADR 0004](adr/0004-idempotency-key.md)) |
-| `NOT NULL` on the main `orders` columns | A missing value would corrupt a balance |
+| `NOT NULL` on `orders.instrumentId`, `userId`, `side`, `size`, `type`, `status` and `datetime` | A missing value would corrupt a balance. `price` stays nullable: a MARKET order rejected for `NO_MARKET_PRICE` has none ([ADR 0005](adr/0005-rejected-orders-are-stored.md)) |
 | `CHECK` on `side`, `type`, `status` and `size > 0` | Invalid states become impossible even if application code has a bug |
 | Index `orders (userId, status)` | Every request reads one user's orders by status |
 | Index `marketdata (instrumentId, date DESC)` | Latest price per instrument |

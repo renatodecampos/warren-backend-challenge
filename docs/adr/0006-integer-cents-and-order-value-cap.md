@@ -25,10 +25,15 @@ Integers fix this, but only up to a point. JavaScript numbers are exact for inte
 - Buying by `amount` uses `floor(amount / price)`, so the user never spends more than they asked to ([FR-O5](../01-requirements.md#orders)).
 - Where a division or percentage is unavoidable (average cost after a partial sale, returns), it is rounded once, at that step, to the nearest cent.
 
-**A cap on the value of one order.** `size x price` may not exceed 99,999,999.99 pesos (9,999,999,999 cents), the same ceiling that `amount` and `price` already have because of the column type. Above it the API answers `422 ORDER_VALUE_TOO_LARGE` and stores nothing ([0005](0005-rejected-orders-are-stored.md)).
+**A cap on the value of one order.** `size x price` may not exceed 99,999,999.99 pesos (9,999,999,999 cents). Above it the API answers `422 ORDER_VALUE_TOO_LARGE` and stores nothing ([0005](0005-rejected-orders-are-stored.md)).
 
+- The number is a placeholder that I chose, not something the schema imposes: `size x price` is not stored in any column. What the arithmetic needs is only that a cap exists, low enough to leave room for sums. I picked the largest price the `NUMERIC(10,2)` column can hold, so one share at any storable price is always accepted.
+- It applies to every row written to `orders`, transfers included (`size x 1`). One rule for the whole ledger is what makes the sum argument below hold.
 - The cap is checked **before** any other arithmetic with the product. Above 9 x 10^15 the multiplication itself is inexact, but such a value is far above the cap, so the comparison is still right.
 - With the cap, a single order is at most 10^10 cents, so an account would need about 900,000 maximum-value orders before a running sum approaches the safe-integer limit.
+- The cap bounds `size x price` of one order and the sums built from it. It does **not** bound two other products, so these are computed in `BigInt`:
+  - `cost x sold` in the average-cost step of a partial sale ([0007](0007-return-definitions.md)). A position that cost 50 million pesos (5 x 10^9 cents) with 2,000,000 shares sold gives 10^16, above the limit, with every input valid. The result of the division is never larger than `cost`, so it goes back to a number safely.
+  - `quantity x close` for the value of a position. The quantity is a sum over several orders and `close` can be far above the prices paid. The result is converted back with a `Number.isSafeInteger` check, and the request fails loudly instead of returning a wrong value.
 - For a MARKET order the price is only known after reading the latest `close`, so the cap is checked in the service, not in the request schema.
 
 ## Alternatives considered
@@ -36,17 +41,17 @@ Integers fix this, but only up to a point. JavaScript numbers are exact for inte
 | Alternative | Why not |
 | --- | --- |
 | A decimal library (`decimal.js`, `big.js`) | The right choice with several currencies or more than two decimals. One more dependency and slower arithmetic for a single two-decimal currency |
-| `BigInt` everywhere | Removes the size limit, and the cap would not be needed. It does not serialise to JSON and makes every arithmetic expression noisier |
+| `BigInt` everywhere | Removes the size limit, and the cap would not be needed. It does not serialise to JSON and makes every arithmetic expression noisier. Used only for the two products the cap does not bound |
 | All the arithmetic in SQL with `NUMERIC` | Exact, but average cost depends on replaying orders in sequence, which is done in code ([0001](0001-orders-table-as-ledger.md)) |
 | Floats, rounding at the end | Simplest, and wrong by a cent after enough additions |
 | No cap; rely on "insufficient funds" to reject absurd orders | Usually true, but the check itself would be done with inexact arithmetic exactly when the numbers are absurd |
 
 ## Consequences
 
-- Sums, comparisons and balance checks are exact.
+- Sums, comparisons and balance checks are exact. The two products outside the cap are exact because they use `BigInt`, and each needs a test with values above the safe-integer limit.
 - Rounding happens in a few known places, not everywhere.
-- The cap is a technical limit tied to the `NUMERIC(10,2)` column, not a business rule. A real per-order limit is a product and risk decision, and it would replace this constant.
-- Two orders of 99,999,999.99 pesos are fine; one of 100 million is not. A client that needs larger orders must split them, which is a contract change to be aware of.
+- The cap is a technical placeholder, not a business rule. A real per-order limit is a product and risk decision, and it would replace this constant. Raising it is cheap: each factor of 10 divides the headroom for sums by 10 (90,000 maximum-value orders at 10^11 cents).
+- The value is not large for a broker, and inflation makes it smaller in real terms every year. A deposit or an order of 100 million pesos is refused. Two of 99,999,999.99 are fine, so a client that needs more must split, which is a contract detail to state in the API documentation.
 - The cap needs a test on each side: exactly at the limit is accepted, one cent above is refused, and an absurd `size x price` is refused without being stored.
 
 ## Revisit when

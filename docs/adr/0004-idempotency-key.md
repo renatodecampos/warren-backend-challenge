@@ -10,7 +10,7 @@ A client sends `POST /orders` and the connection times out. It cannot know wheth
 ## Assumptions
 
 - Clients can generate a unique key per intended order (a UUID is enough).
-- Existing simple clients must keep working, so the key cannot be mandatory in this version.
+- The API has no clients yet. Whoever evaluates this case will call it by hand, with curl or a request collection, and a mandatory header would get in the way of that. This is the only reason the key is optional in this version.
 
 ## Decision
 
@@ -33,7 +33,7 @@ Details that decide the behaviour:
 - **The key lives as long as the order.** There is no expiry, because `orders` is the ledger and the order is never deleted.
 - A unique index on `(userId, idempotency_key)` is the backstop. The lock already makes a duplicate impossible, so the index only protects against a future writer that forgets the lock.
 
-In production the header becomes mandatory (`400 IDEMPOTENCY_KEY_REQUIRED`). It is optional here only so that simple clients and examples keep working.
+In production the header becomes mandatory (`400 IDEMPOTENCY_KEY_REQUIRED`). It is optional here only so that the API can be tried by hand without it.
 
 ## Alternatives considered
 

@@ -21,8 +21,21 @@ An open LIMIT order blocks what it may need until it is executed or cancelled.
 - **Available balance** = cash balance minus reserved cash. New BUY orders and withdrawals are checked against it. New SELL orders are checked against shares held minus reserved shares.
 - **Total account value** = cash balance plus the market value of holdings. Reserved cash is still the user's money, so it is not subtracted here.
 - Reservations are never stored. They are computed from the user's `NEW` orders, so cancelling an order releases its reservation immediately and there is nothing to clean up.
+- The portfolio returns the three numbers by name, `cashBalance`, `reservedCash` and `availableBalance`, so the reservation is visible and a reader who expects the `FILLED`-only figure finds it in the same response.
 
 The limit price is used because it is the worst case for a BUY: it is the only amount that guarantees the order can be honoured if it executes.
+
+**How this reads the brief.** The brief asks for the "available balance in pesos for trading" and says to compute it from "all relevant transactions in the `orders` table". I read open LIMIT orders as relevant to what is *available*, while cash and positions themselves still come from `FILLED` orders only (FR-P4).
+
+**In my seed data** (user 1 of the `database.sql` I rebuilt from the brief), which becomes a test with these values:
+
+| Number | Value | From |
+| --- | --- | --- |
+| `cashBalance` | 753,000.00 | The user's `FILLED` orders |
+| `reservedCash` | 125,500.00 | Two `NEW` LIMIT BUY orders: 50 x 710.00 and 60 x 1,500.00 |
+| `availableBalance` | 627,500.00 | 753,000.00 - 125,500.00 |
+
+Without this decision the available balance would be 753,000.00. Both figures are in the response, so the difference is explained instead of looking like a bug.
 
 ## Alternatives considered
 

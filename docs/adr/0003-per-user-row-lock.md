@@ -33,7 +33,7 @@ SELECT id FROM users WHERE id = $1 FOR UPDATE
 
 ## Evidence
 
-In a first prototype (kept outside this repository) a test fired 10 simultaneous orders at a balance that fits 3 of them, and expected exactly 3 filled and 7 rejected. With the lock removed it let 6 to 9 orders through; with the lock it passed every time. The same test is part of this version's suite, written before the implementation.
+In a first prototype (kept outside this repository) a test fired 10 simultaneous orders at a balance that fits 3 of them, and expected exactly 3 filled and 7 rejected. With the lock removed it let 6 to 9 orders through; with the lock it passed every time. The same test will be written for this version before the implementation, and this record will link to it.
 
 ## Alternatives considered
 

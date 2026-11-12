@@ -41,7 +41,7 @@ Only `FILLED` orders count towards cash and positions (FR-P4). `NEW` orders do n
 - One source of truth. A balance cannot disagree with the history, and the history is the audit trail.
 - The cost of every order submission and every portfolio read grows with the number of orders of that user.
 - The replay runs inside the per-user lock that protects order submission, so a long history also lengthens the time the lock is held. This is the first thing that breaks under growth.
-- Bad history is visible instead of hidden. If an order stream ever shows a user holding fewer than zero shares, the replay keeps the cash effect and the portfolio simply does not list a non-positive position. The write path is what must prevent it.
+- Bad history is tolerated on read and blocked on write. The seed I rebuilt from the brief has one case: user 1 bought 20 shares of instrument 31 and sold 30. The replay keeps the cash effect of every `FILLED` order, lets the quantity go negative (it is the net of `size`, as the brief says), never lets the cost go below zero, and the portfolio does not list a non-positive position. The exact cost rule is in [0007](0007-return-definitions.md). The write path is what must prevent new cases.
 - The `(userId, status)` index keeps the read to one user's rows; rejected and cancelled orders do not enter the replay.
 
 ## Revisit when

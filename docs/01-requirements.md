@@ -2,7 +2,7 @@
 
 Source: the original brief, kept verbatim in [`00-challenge-brief.md`](00-challenge-brief.md). This document restates it as testable requirements, separates what the brief says from what it leaves open, and lists what is deliberately out of scope.
 
-Reading order: this document, then [02 Design](02-design.md) (whiteboard, open questions, options), then the [ADRs](adr/README.md), then the code and tests.
+Reading order: this document, then [02 Design](02-design.md) (whiteboard, open questions, options), then the [ADRs](adr/README.md), then the [spec](03-spec.md), then the code and tests.
 
 ## 1. What is being built
 
@@ -23,9 +23,9 @@ Each requirement has an id, so tests, ADRs and the code review can point back to
 | Id | Requirement | Acceptance criterion |
 | --- | --- | --- |
 | FR-P1 | Return the **total value** of the user's account | Equals cash plus the market value of all positions |
-| FR-P2 | Return the **available balance** in pesos for trading | Cash from `FILLED` orders, as defined in FR-O9 |
+| FR-P2 | Return the **available balance** in pesos for trading | Cash balance (`FILLED` orders, FR-O9) minus the cash reserved by open LIMIT BUY orders ([ADR 0002](adr/0002-open-limit-orders-reserve-funds.md)). The cash balance and the reserved amount are returned next to it |
 | FR-P3 | Return the list of assets owned: **number of shares**, **total monetary value ($)** and **total return (%)** | Values match a hand-computed example from the seed data |
-| FR-P4 | Holdings and balance are computed from the `orders` table using `size` and only `FILLED` orders | No separate balance is read from anywhere else |
+| FR-P4 | Holdings and the cash balance are computed from the `orders` table using `size` and only `FILLED` orders | No balance is stored anywhere. `NEW` orders never move cash or shares; they only reduce what is available (FR-P2) |
 | FR-P5 | Return the **daily return** from `close` and `previousClose` | `(close - previousClose) / previousClose` |
 | FR-P6 | All prices are in pesos | No currency conversion exists |
 
@@ -103,6 +103,7 @@ These are the points where two reasonable engineers would build different things
 | Requirements (this document) | `docs/01-requirements.md` |
 | Design: whiteboard, open questions, options and trade-offs | `docs/02-design.md` |
 | Decision records | `docs/adr/` |
+| Spec: endpoint contracts, rules, tests and order of work | `docs/03-spec.md` |
 | API, migrations and tests | `src/`, `db/`, `tests/` |
 | Request collection and examples | to be decided in the design |
 | Code review of my own work | `docs/06-code-review.md` |
