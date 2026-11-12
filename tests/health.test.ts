@@ -51,4 +51,33 @@ describe('database', () => {
     await expect(insert('GIFT', 1)).rejects.toThrow(/orders_side_chk/);
     await expect(insert('BUY', 0)).rejects.toThrow(/orders_size_chk/);
   });
+
+  it('D1: the constraints refuse an invalid type, an invalid status and a duplicate idempotency key', async () => {
+    const client = await pool.connect();
+    const insert = (type: string, status: string, key: string | null) =>
+      client.query(
+        `INSERT INTO orders (instrumentid, userid, side, size, price, type, status, idempotency_key, datetime)
+         VALUES (1, 1, 'BUY', 1, 10, $1, $2, $3, now())`,
+        [type, status, key],
+      );
+
+    try {
+      await client.query('BEGIN');
+
+      await client.query('SAVEPOINT s');
+      await expect(insert('STOP', 'FILLED', null)).rejects.toThrow(/orders_type_chk/);
+      await client.query('ROLLBACK TO SAVEPOINT s');
+
+      await client.query('SAVEPOINT s');
+      await expect(insert('MARKET', 'OPEN', null)).rejects.toThrow(/orders_status_chk/);
+      await client.query('ROLLBACK TO SAVEPOINT s');
+
+      await insert('MARKET', 'FILLED', 'd1-duplicate');
+      await client.query('SAVEPOINT s');
+      await expect(insert('MARKET', 'FILLED', 'd1-duplicate')).rejects.toThrow(/uq_orders_user_idempotency_key/);
+    } finally {
+      await client.query('ROLLBACK').catch(() => undefined);
+      client.release();
+    }
+  });
 });

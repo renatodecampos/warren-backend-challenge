@@ -163,4 +163,43 @@ describe('POST /transfers', () => {
     expect(res.body).toMatchObject({ status: 'REJECTED', rejectionReason: 'INSUFFICIENT_FUNDS' });
     expect(await portfolio(userId)).toMatchObject({ cashBalance: 10_000, availableBalance: 1_000 });
   });
+
+  it('T2: a rejected CASH_OUT replays as the same rejection with the same key', async () => {
+    const userId = await createUser(1_000);
+    const transfer = { userId, side: 'CASH_OUT', amount: 1_001 };
+
+    const first = await api.post('/transfers').set(KEY, 'rejected-1').send(transfer);
+    const second = await api.post('/transfers').set(KEY, 'rejected-1').send(transfer);
+
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({ status: 'REJECTED', rejectionReason: 'INSUFFICIENT_FUNDS' });
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual(first.body);
+    expect(await storedTransfers(userId)).toHaveLength(1);
+  });
+
+  it('T2: two simultaneous withdrawals that fit once give one FILLED and one REJECTED', async () => {
+    const userId = await createUser(1_000);
+    const transfer = { userId, side: 'CASH_OUT', amount: 1_000 };
+
+    const responses = await Promise.all([api.post('/transfers').send(transfer), api.post('/transfers').send(transfer)]);
+
+    expect(responses.map((res) => res.status)).toEqual([201, 201]);
+    expect(responses.map((res) => (res.body as { status: string }).status).sort()).toEqual(['FILLED', 'REJECTED']);
+    expect((await portfolio(userId)).cashBalance).toBe(0);
+    expect(await storedTransfers(userId)).toHaveLength(2);
+  });
+
+  it('T1: the idempotency namespace is shared with POST /orders', async () => {
+    const userId = await createUser(10_000);
+    await api
+      .post('/orders')
+      .set(KEY, 'shared-1')
+      .send({ userId, instrumentId: PAMP, side: 'BUY', type: 'MARKET', size: 1 });
+
+    const res = await api.post('/transfers').set(KEY, 'shared-1').send({ userId, side: 'CASH_IN', amount: 100 });
+
+    expectError(res, 422, 'IDEMPOTENCY_KEY_REUSED');
+    expect(await storedTransfers(userId)).toEqual([]);
+  });
 });

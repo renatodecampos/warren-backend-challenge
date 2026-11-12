@@ -46,7 +46,7 @@ Only `FILLED` orders count towards cash and positions (FR-P4). `NEW` orders do n
 
 ## Tests
 
-The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test is grouped under its id.
 
 | Test | What it pins |
 | --- | --- |

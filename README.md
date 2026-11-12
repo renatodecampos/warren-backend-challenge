@@ -2,7 +2,7 @@
 
 A small trading API: **portfolio**, **asset search** and **order submission** (MARKET and LIMIT), on Node.js, TypeScript, Express and PostgreSQL.
 
-**Status: complete.** Slices 0 to 9 of the spec's order of work, including the review of my own code and the follow-up that closed four of its findings ([the review](docs/06-code-review.md)). `npm run check` is green: strict types, type-aware lint and 217 tests.
+**Status: complete.** Slices 0 to 9 of the spec's order of work, including the review of my own code and the follow-up that closed four of its findings ([the review](docs/06-code-review.md)). `npm run check` is green: strict types, type-aware lint and 232 tests.
 
 ## How I worked
 
@@ -14,10 +14,10 @@ The brief says they want to see how I think. This is the order I worked in, and 
 | 2 | Drew it before writing it | Whiteboard v0: model, flow, open questions. v1 after the design pass, with v0 kept on top so the evolution is visible | [Whiteboard](docs/whiteboard/wb-v1.png) |
 | 3 | Listed the options and weighed the trade-offs | Seven areas with real alternatives, each with what it gains and what it costs | [Design, section 4](docs/02-design.md#4-options-considered-and-trade-offs) |
 | 4 | Found the critical path and the corner cases | The replay of `FILLED` orders is the one rule everything shares. Concurrency, retries, rejections, missing prices and integer cents are where it breaks | [Spec, section 3](docs/03-spec.md#3-account-state-the-rule-everything-shares) |
-| 5 | Wrote the contract before the code | Endpoint contracts, error codes, schema changes, 42 test ids and the slice order | [Spec](docs/03-spec.md) |
+| 5 | Wrote the contract before the code | Endpoint contracts, error codes, schema changes, 45 test ids and the slice order | [Spec](docs/03-spec.md) |
 | 6 | Built in vertical slices, test first | One branch per slice: failing test, implementation, pull request I review. Slices 1 to 7 have the `test:` commit before the `feat:` commit | [Spec, section 8](docs/03-spec.md#8-order-of-work) |
 | 7 | Guided the AI with a contract and guarded the result | The assistant implements the spec; every ambiguity goes back into the spec first. Three guard-rail layers make a green run the definition of done | [Spec, section 6](docs/03-spec.md#guard-rails) |
-| 8 | Tested the guarantees, not the lines | 217 tests against a real PostgreSQL: the concurrency race, the lock timeout, the idempotent replay, the hand-computed portfolio, money rounding | [`tests/`](tests/) |
+| 8 | Tested the guarantees, not the lines | 232 tests against a real PostgreSQL: the concurrency race, the lock timeout, the idempotent replay, the hand-computed portfolio, money rounding | [`tests/`](tests/) |
 | 9 | Reviewed my own work | Read as if someone else wrote it: 11 findings with severities, what holds, what I would change, what I accept | [Code review](docs/06-code-review.md) |
 
 Two things carried more weight than they look.

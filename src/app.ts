@@ -26,7 +26,7 @@ export const requestContext: RequestHandler = (req, res, next) => {
     log('info', {
       requestId,
       method: req.method,
-      path: req.originalUrl,
+      path: req.path,
       status: res.statusCode,
       durationMs: Date.now() - start,
     });
@@ -61,6 +61,11 @@ function isDatabaseTimeout(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && TIMEOUT_CODES.has(String(err.code));
 }
 
+/** body-parser's own error type for a body above the `express.json` limit. */
+function isBodyTooLarge(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'type' in err && err.type === 'entity.too.large';
+}
+
 /** Turns every failure into the one error shape. Anything unexpected is logged, never shown. */
 export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
   if (err instanceof ZodError) {
@@ -70,6 +75,10 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
   }
   if (err instanceof AppError) {
     res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    return;
+  }
+  if (isBodyTooLarge(err)) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The request body is too large (limit 10 kB)' } });
     return;
   }
   if (isClientError(err)) {

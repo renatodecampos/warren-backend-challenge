@@ -82,7 +82,9 @@ export async function getPortfolio(pool: Pool, userId: number): Promise<Portfoli
       const instrument = instrumentById.get(position.instrumentId);
       if (!instrument) throw new Error(`Instrument ${position.instrumentId} of a position was not found`);
 
-      const closeCents = instrument.close === null ? null : toCents(Number(instrument.close));
+      // A close of zero or below is no price, the same as a missing row (spec, section 4.1).
+      const rawCloseCents = instrument.close === null ? null : toCents(Number(instrument.close));
+      const closeCents = rawCloseCents !== null && rawCloseCents > 0 ? rawCloseCents : null;
       const previousCloseCents =
         instrument.previousclose === null ? null : toCents(Number(instrument.previousclose));
       const marketValueCents =

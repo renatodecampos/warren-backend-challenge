@@ -77,7 +77,7 @@ Ordered by what I would do first. Each step has the trigger that justifies it, s
 
 ## Tests
 
-The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test is grouped under its id.
 
 | Test | What it pins |
 | --- | --- |
