@@ -329,6 +329,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | --- | --- | --- |
 | C1 | Cancel a `NEW` order: 200, `CANCELLED`, reserved cash released | FR-O8 |
 | C2 | Cancel a `FILLED`, `REJECTED` or `CANCELLED` order: 409. Another user's order: 404 | FR-O8 |
+| L1 | Lists a user's orders newest first, filtered by `status`, paged. `userId` is required; an invalid `status`, `limit` or `offset` is 400. A user that does not exist gets an empty array | 4.5 |
 | T1 | `CASH_IN` raises the balance by `amount`; `CASH_OUT` lowers it | FR-O9 |
 | T2 | `CASH_OUT` above available cash is stored `REJECTED` | Q12 |
 | P1 | Seed portfolio equals the example in 4.1, field by field: total 904,784.00, two positions, instrument 31 not listed | FR-P1 to FR-P5 |
@@ -355,7 +356,7 @@ One vertical slice at a time. Each ends with a commit that leaves the suite gree
 | 4 | `POST /orders`: MARKET by size, then amount, then LIMIT and reservations, then rejections, then the cap | O1 to O10 |
 | 5 | The lock, proven by the concurrency test. Written to fail first without the lock. Timeouts answered as `503 BUSY` | O11, E2 |
 | 6 | Idempotency | I1 to I8 |
-| 7 | Cancel, list, transfers | C1, C2, T1, T2 |
+| 7 | Cancel, list, transfers | C1, C2, L1, T1, T2 |
 | 8 | Request collection with examples, "Running it" in the README, links from the ADRs to the tests | NFR-6 |
 | 9 | Code review of my own work, `docs/06-code-review.md` | |
 
@@ -374,6 +375,7 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Invalid `Idempotency-Key` (empty, above 50 characters, or a character outside printable ASCII, `0x20` to `0x7E`) | `400 VALIDATION_ERROR`, the same as an invalid body. It is not ignored: a client that sent a key believes it is protected |
 | Paging | `limit` 1 to 100, default 20. `offset` up to 2,147,483,647, the same bound as an id. A `limit` above 100 is a `400`, not silently lowered |
 | Unknown query fields | Refused, the same as in a body |
+| `GET /orders` for a user that does not exist | `200` with an empty array. It is one query, without a second one to look the user up |
 | Search order after ticker | By id, so that paging is stable if two instruments ever share a ticker |
 | Portfolio ordering | By market value, descending |
 | Rounding of percentages | Half away from zero, so a gain and a loss of the same size show the same number. For cost, which is never negative, this is the same as half up |
