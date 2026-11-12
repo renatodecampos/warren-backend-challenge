@@ -26,7 +26,7 @@ SELECT id FROM users WHERE id = $1 FOR UPDATE
 - The transaction runs at `READ COMMITTED`. A second request for the same user waits on the row, and once it gets the lock its next statements see what the first one committed. Check and insert become one atomic step per user.
 - Different users never block each other.
 - The same read returns 404 for an unknown user, so the lock costs no extra query.
-- The idempotency check (ADR 0004, planned) happens after the lock, so two requests with the same key cannot both pass it.
+- The idempotency check ([0004](0004-idempotency-key.md)) happens after the lock, so two requests with the same key cannot both pass it.
 - Reads do not take the lock. The portfolio runs in a `REPEATABLE READ READ ONLY` transaction to get one consistent snapshot across its queries.
 - Cancelling an order is one conditional `UPDATE ... WHERE status = 'NEW'`, without the lock. It can only release a reservation, so the worst outcome of a race is that a concurrent order sees slightly less available than it could have.
 - There is a single lock per operation, so there is no lock ordering to get wrong and no deadlock between two users.

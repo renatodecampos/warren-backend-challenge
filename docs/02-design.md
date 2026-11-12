@@ -150,6 +150,7 @@ The schema was rebuilt from the brief, so these are my additions and differences
 | --- | --- |
 | `orders.rejection_reason` | A `REJECTED` order should say why |
 | `orders.idempotency_key` with a unique index on `(userId, idempotency_key)` | Retries (4.5). Null for clients that send no key |
+| `orders.request_hash` | Fingerprint of the request, to tell a real retry from a reused key. Needed because `amount` becomes a `size` that depends on the price at that moment ([ADR 0004](adr/0004-idempotency-key.md)) |
 | `NOT NULL` on the main `orders` columns | A missing value would corrupt a balance |
 | `CHECK` on `side`, `type`, `status` and `size > 0` | Invalid states become impossible even if application code has a bug |
 | Index `orders (userId, status)` | Every request reads one user's orders by status |

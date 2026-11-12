@@ -7,7 +7,7 @@ The brief leaves several things open. Instead of guessing silently, each record 
 | [0001](0001-orders-table-as-ledger.md) | The `orders` table is the ledger; balances are derived by replay | Accepted |
 | [0002](0002-open-limit-orders-reserve-funds.md) | Open LIMIT orders reserve cash or shares | Accepted |
 | [0003](0003-per-user-row-lock.md) | Concurrency is controlled with one row lock per user | Accepted |
-| 0004 | Retries are safe with an idempotency key | Planned |
+| [0004](0004-idempotency-key.md) | Retries are safe with an idempotency key | Accepted |
 | 0005 | Orders refused by the market are stored as `REJECTED` and return 201 | Planned |
 | 0006 | Money is handled as integer cents, with a cap on order value | Planned |
 | 0007 | How returns are defined (total and daily) | Planned |
