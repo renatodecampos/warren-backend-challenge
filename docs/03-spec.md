@@ -22,13 +22,14 @@ Rules for whoever implements it, person or assistant:
 | --- | --- |
 | Format | JSON in and out, `Content-Type: application/json` |
 | Money | Pesos as JSON numbers with at most two decimals (`930`, `450.5`, `99999999.99`). More than two decimals is a `400` |
-| Percentages | Numbers with two decimals, already multiplied by 100 (`18.18` means 18.18%). `null` when undefined |
+| Percentages | Numbers with two decimals, already multiplied by 100 (`18.18` means 18.18%), rounded half away from zero. `null` when undefined |
 | Ids | Positive 32-bit integers |
 | Dates | ISO 8601, UTC |
 | Request id | Every response carries `X-Request-Id`. An incoming `X-Request-Id` is reused, otherwise one is generated. It is in every log line |
 | Logs | One JSON line per request: `requestId`, `method`, `path`, `status`, `durationMs` |
 | Errors | Always `{ "error": { "code": "...", "message": "..." } }`. Clients switch on `code` |
 | Unknown fields | Refused with `400 VALIDATION_ERROR` |
+| NUL character | A `q` or `ticker` containing U+0000 is refused with `400 VALIDATION_ERROR` |
 
 Internal rule: all arithmetic is in integer cents ([ADR 0006](adr/0006-integer-cents-and-order-value-cap.md)). Requests are converted with `Math.round(value x 100)` after the two-decimal check; responses are converted back at the last step.
 
@@ -36,14 +37,14 @@ Internal rule: all arithmetic is in integer cents ([ADR 0006](adr/0006-integer-c
 
 | HTTP | Code | When |
 | --- | --- | --- |
-| 400 | `VALIDATION_ERROR` | Body, query or path does not match the schema, or the body is not valid JSON |
+| 400 | `VALIDATION_ERROR` | Body, query, path or `Idempotency-Key` header does not match the schema, or the body is not valid JSON |
 | 400 | `INVALID_INSTRUMENT` | The cash instrument (`MONEDA`) used in `POST /orders` |
 | 404 | `USER_NOT_FOUND`, `INSTRUMENT_NOT_FOUND`, `ORDER_NOT_FOUND` | The id or ticker does not exist |
 | 404 | `NOT_FOUND` | No such route |
 | 409 | `ORDER_NOT_CANCELLABLE` | Cancel of an order that is not `NEW` |
 | 422 | `AMOUNT_BELOW_ONE_SHARE` | `amount` buys less than one share |
 | 422 | `NO_PRICE_FOR_AMOUNT` | `amount` given and the instrument has no market price |
-| 422 | `ORDER_VALUE_TOO_LARGE` | `size x price` above 99,999,999.99 |
+| 422 | `ORDER_VALUE_TOO_LARGE` | `size x price` above 99,999,999.99, or an `amount` that buys more shares than one order can hold |
 | 422 | `IDEMPOTENCY_KEY_REUSED` | Same key, different request |
 | 503 | `BUSY` | Lock or statement timeout. Safe to retry with the same idempotency key |
 | 503 | `DATABASE_UNAVAILABLE` | Health check only: the database did not answer |
@@ -137,7 +138,7 @@ Errors: `400` bad id, `404 USER_NOT_FOUND`.
 
 ### 4.2 `GET /instruments?q=&limit=&offset=`
 
-FR-S1, FR-S2. `q` is required, 1 to 100 characters after trim. `limit` 1 to 100, default 20. `offset` default 0.
+FR-S1, FR-S2. `q` is required, 1 to 100 characters after trim. `limit` 1 to 100, default 20. `offset` 0 to 2,147,483,647, default 0. An unknown query field is refused like an unknown body field.
 
 `200`: an array of `{ "id", "ticker", "name", "type" }`.
 
@@ -161,20 +162,20 @@ Body:
 | `instrumentId` or `ticker` | id, or string of 1 to 10 | exactly one. Ticker match is case-insensitive |
 | `side` | `BUY`, `SELL` | required |
 | `type` | `MARKET`, `LIMIT` | required |
-| `size` or `amount` | positive integer, or money | exactly one |
-| `price` | money | required for `LIMIT`, refused for `MARKET` |
+| `size` or `amount` | positive 32-bit integer, or money | exactly one |
+| `price` | money, above zero | required for `LIMIT`, refused for `MARKET` |
 
 Steps, in this order ([ADR 0003](adr/0003-per-user-row-lock.md), [0004](adr/0004-idempotency-key.md)):
 
-1. Validate the body. `400` if invalid.
+1. Validate the body and, if sent, the key. `400` if invalid.
 2. `BEGIN` at `READ COMMITTED`.
 3. `SELECT id FROM users WHERE id = $1 FOR UPDATE`. `404 USER_NOT_FOUND` if no row.
 4. If a key was sent, look for an order of this user with that key. Found with the same `request_hash`: return it with `200`. Found with another hash: `422 IDEMPOTENCY_KEY_REUSED`.
 5. Resolve the instrument. `404 INSTRUMENT_NOT_FOUND`; `400 INVALID_INSTRUMENT` for cash.
-6. Price: `LIMIT` uses the given price; `MARKET` uses the latest non-null `close`.
+6. Price: `LIMIT` uses the given price; `MARKET` uses the latest non-null `close`. A `close` that is not above zero is no price.
 7. No price (only possible for `MARKET`): with `size`, store `REJECTED` with `NO_MARKET_PRICE` and a null price; with `amount`, `422 NO_PRICE_FOR_AMOUNT`.
 8. Size: given, or `floor(amount / price)`. Zero: `422 AMOUNT_BELOW_ONE_SHARE`.
-9. `size x price` above the cap: `422 ORDER_VALUE_TOO_LARGE`. Checked before any other use of the product.
+9. `size x price` above the cap: `422 ORDER_VALUE_TOO_LARGE`. Checked before any other use of the product. The same answer when `amount` gives a `size` above 2,147,483,647.
 10. Load the account state (section 3).
 11. `BUY` with `size x price` > available cash: `REJECTED`, `INSUFFICIENT_FUNDS`. `SELL` with `size` > available shares: `REJECTED`, `INSUFFICIENT_SHARES`.
 12. Otherwise status is `FILLED` for `MARKET` and `NEW` for `LIMIT`.
@@ -262,6 +263,8 @@ src/
   errors.ts          AppError(status, code, message)
 db/                  database.sql, migrations/
 tests/               functional tests against a real PostgreSQL; unit tests for the pure modules
+requests.http        the REST Client collection: one example per endpoint and per outcome
+postman_collection.json  the Postman v2.1 export of the same walk-through, with assertions
 ```
 
 Configuration by environment variables: `PORT`, `DATABASE_URL`, and `TEST_ADMIN_URL` for the tests. Docker Compose starts PostgreSQL 16 with the base file and the migration applied. The test run creates and drops its own database.
@@ -273,7 +276,7 @@ The code is written with an AI assistant, so the rules of section 1 are backed b
 | Layer | What | Stops |
 | --- | --- | --- |
 | 1. One command | `npm run check` runs the type check (strict), the linter (type-aware, so an un-awaited promise is an error) and the whole suite | A slice called done with a red test, a type error or a floating promise |
-| 2. CI and branches | GitHub Actions runs `npm run check` on every pull request to `development` and `main`, against a real PostgreSQL. Both branches are protected: no direct push, merge only with the check green | Code reaching a shared branch without passing layer 1 |
+| 2. CI and branches | GitHub Actions runs `npm run check` on every pull request to `development` and `main`, against a real PostgreSQL. Neither branch takes a direct push: every change is a pull request, merged only with the check green | Code reaching a shared branch without passing layer 1 |
 | 3. Limits on the assistant | `.claude/settings.json`, versioned: it cannot edit `db/database.sql`, cannot read `.env`, cannot push to `main` or `development`, and the type check runs after every file it edits. `CLAUDE.md` points it to this spec | The assistant changing the base schema, leaking secrets or skipping the pull request |
 
 Layer 3 is a convenience, not a security boundary: a command can be written to get around a pattern. Layer 2 is what enforces. The database constraints of section 5 are a fourth layer that needs no tooling: they hold even if a test is missing.
@@ -321,6 +324,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | I5 | Same key from two users gives two orders | ADR 0004 |
 | I6 | Two simultaneous requests with the same key give one row | ADR 0003, 0004 |
 | I7 | `amount` order replayed after the price changed returns the original order | ADR 0004 |
+| I8 | An invalid key (empty, 51 characters, not printable ASCII) is 400, nothing stored. A key of 50 characters is accepted | ADR 0004 |
 
 ### Functional: the rest
 
@@ -328,6 +332,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | --- | --- | --- |
 | C1 | Cancel a `NEW` order: 200, `CANCELLED`, reserved cash released | FR-O8 |
 | C2 | Cancel a `FILLED`, `REJECTED` or `CANCELLED` order: 409. Another user's order: 404 | FR-O8 |
+| L1 | Lists a user's orders newest first, filtered by `status`, paged. `userId` is required; an invalid `status`, `limit` or `offset` is 400. A user that does not exist gets an empty array | 4.5 |
 | T1 | `CASH_IN` raises the balance by `amount`; `CASH_OUT` lowers it | FR-O9 |
 | T2 | `CASH_OUT` above available cash is stored `REJECTED` | Q12 |
 | P1 | Seed portfolio equals the example in 4.1, field by field: total 904,784.00, two positions, instrument 31 not listed | FR-P1 to FR-P5 |
@@ -353,8 +358,8 @@ One vertical slice at a time. Each ends with a commit that leaves the suite gree
 | 3 | Asset search | S1 to S3 |
 | 4 | `POST /orders`: MARKET by size, then amount, then LIMIT and reservations, then rejections, then the cap | O1 to O10 |
 | 5 | The lock, proven by the concurrency test. Written to fail first without the lock. Timeouts answered as `503 BUSY` | O11, E2 |
-| 6 | Idempotency | I1 to I7 |
-| 7 | Cancel, list, transfers | C1, C2, T1, T2 |
+| 6 | Idempotency | I1 to I8 |
+| 7 | Cancel, list, transfers | C1, C2, L1, T1, T2 |
 | 8 | Request collection with examples, "Running it" in the README, links from the ADRs to the tests | NFR-6 |
 | 9 | Code review of my own work, `docs/06-code-review.md` | |
 
@@ -370,10 +375,20 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Unknown route, malformed JSON | `404 NOT_FOUND`; `400 VALIDATION_ERROR` |
 | Health with the database down | `503 DATABASE_UNAVAILABLE` |
 | Unknown fields in a body | Refused |
-| Paging | `limit` 1 to 100, default 20 |
+| Invalid `Idempotency-Key` (empty, above 50 characters, or a character outside printable ASCII, `0x20` to `0x7E`) | `400 VALIDATION_ERROR`, the same as an invalid body. It is not ignored: a client that sent a key believes it is protected |
+| Paging | `limit` 1 to 100, default 20. `offset` up to 2,147,483,647, the same bound as an id. A `limit` above 100 is a `400`, not silently lowered |
+| Unknown query fields | Refused, the same as in a body |
+| `GET /orders` for a user that does not exist | `200` with an empty array. It is one query, without a second one to look the user up |
+| Search order after ticker | By id, so that paging is stable if two instruments ever share a ticker |
 | Portfolio ordering | By market value, descending |
-| Ticker lookup | Case-insensitive, exact |
+| Rounding of percentages | Half away from zero, so a gain and a loss of the same size show the same number. For cost, which is never negative, this is the same as half up |
+| Portfolio `currency` | The constant `ARS`. The system has one currency: one cash instrument, every price in pesos |
+| Ticker lookup | Case-insensitive, exact. The lowest id if two instruments ever share a ticker |
+| Largest `size` | 2,147,483,647, what the `INT` column holds. Above it a given `size` is a `400`; a `size` computed from `amount` is `422 ORDER_VALUE_TOO_LARGE`, because it depends on the price and the client's remedy is the same: split the order |
+| `price` of zero | Refused with `400`. An `amount` of zero is not: it buys less than one share, so it is the `422` of step 8 |
+| Market `close` of zero or below | Not a price for an order: the outcome of step 7. It cannot fill an order and cannot divide an `amount` |
 | `SELL` by `amount` | Allowed, same `floor(amount / price)` rule as `BUY` |
+| Request collection (NFR-6) | `requests.http` (REST Client) is the canonical walk-through: plain text, reviewed in a pull request like code, with the expected outcome above each request on the fresh seed. `postman_collection.json` is the Postman v2.1 export of the same walk-through, with assertions and collection variables; the REST Client file wins if they disagree. The README repeats the three endpoints of the brief as `curl` |
 
 ## 10. Not in this spec
 

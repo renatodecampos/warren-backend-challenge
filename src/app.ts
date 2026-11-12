@@ -38,10 +38,27 @@ const notFound: RequestHandler = (_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } });
 };
 
-/** body-parser reports a body it could not read (bad JSON, too large) as an error with a 4xx status. */
-function isUnreadableBody(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null || !('type' in err) || !('status' in err)) return false;
-  return typeof err.status === 'number' && err.status >= 400 && err.status < 500;
+/**
+ * A client error from Express, the router or body-parser: a malformed path, an unknown
+ * content encoding, a body that is not JSON, or one above the size limit. They carry a
+ * 4xx status but not always a `type`, so the status is what identifies them.
+ */
+function isClientError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof err.status === 'number' &&
+    err.status >= 400 &&
+    err.status < 500
+  );
+}
+
+/** PostgreSQL's `lock_not_available` and `query_canceled`: what `lock_timeout` and `statement_timeout` raise. */
+const TIMEOUT_CODES = new Set(['55P03', '57014']);
+
+function isDatabaseTimeout(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && TIMEOUT_CODES.has(String(err.code));
 }
 
 /** Turns every failure into the one error shape. Anything unexpected is logged, never shown. */
@@ -55,8 +72,12 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
     res.status(err.status).json({ error: { code: err.code, message: err.message } });
     return;
   }
-  if (isUnreadableBody(err)) {
-    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The request body is not valid JSON' } });
+  if (isClientError(err)) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'The request is not valid' } });
+    return;
+  }
+  if (isDatabaseTimeout(err)) {
+    res.status(503).json({ error: { code: 'BUSY', message: 'The server is busy; retry the request' } });
     return;
   }
   log('error', {

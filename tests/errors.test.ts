@@ -1,11 +1,13 @@
 import express from 'express';
+import { Client } from 'pg';
 import request from 'supertest';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createApp, errorHandler, requestContext } from '../src/app';
 import { createPool } from '../src/db';
 import { AppError } from '../src/errors';
 import { api, expectError, pool } from './helpers';
+import { testDbUrl } from './test-env';
 
 afterAll(() => pool.end());
 
@@ -33,6 +35,20 @@ describe('E1: one error shape', () => {
 
   it('a body that is not JSON is 400 VALIDATION_ERROR', async () => {
     const res = await api.post('/orders').set('Content-Type', 'application/json').send('{ "userId": ');
+
+    expectError(res, 400, 'VALIDATION_ERROR');
+  });
+
+  it('a malformed percent-encoded path is 400 VALIDATION_ERROR', async () => {
+    expectError(await api.get('/users/%E0%A4%A/portfolio'), 400, 'VALIDATION_ERROR');
+  });
+
+  it('a body with a bad Content-Encoding is 400 VALIDATION_ERROR', async () => {
+    const res = await api
+      .post('/orders')
+      .set('Content-Type', 'application/json')
+      .set('Content-Encoding', 'gzip')
+      .send('not gzip');
 
     expectError(res, 400, 'VALIDATION_ERROR');
   });
@@ -89,5 +105,106 @@ describe('E1: X-Request-Id', () => {
 
     expect(res.headers['x-request-id']).not.toContain(' ');
     expect(res.headers['x-request-id']).toMatch(/^[\w.-]{8,}$/);
+  });
+});
+
+describe('E1: logs', () => {
+  it('writes one JSON line with the request fields', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const sink = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const res = await api.get('/health');
+
+      expect(res.status).toBe(200);
+      expect(sink).toHaveBeenCalledTimes(1);
+      const line = JSON.parse(String(sink.mock.calls[0]?.[0]));
+      expect(line).toEqual({
+        level: 'info',
+        requestId: res.headers['x-request-id'],
+        method: 'GET',
+        path: '/health',
+        status: 200,
+        durationMs: expect.any(Number),
+      });
+    } finally {
+      sink.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('writes an error line with the request id', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const info = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await failingApp().get('/unexpected');
+
+      expectError(res, 500, 'INTERNAL_ERROR');
+      expect(errors).toHaveBeenCalledTimes(1);
+      const line = JSON.parse(String(errors.mock.calls[0]?.[0]));
+      expect(line).toMatchObject({ level: 'error', requestId: res.headers['x-request-id'] });
+      expect(line.message).toContain('ECONNREFUSED');
+      expect(info).toHaveBeenCalledTimes(1);
+    } finally {
+      info.mockRestore();
+      errors.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe('E1: pool errors', () => {
+  it('an idle database client error does not terminate the process', async () => {
+    const idlePool = createPool(testDbUrl());
+    try {
+      expect(() => idlePool.emit('error', new Error('idle client died'))).not.toThrow();
+    } finally {
+      await idlePool.end();
+    }
+  });
+});
+
+describe('E2: timeouts are 503 BUSY', () => {
+  it('an order that waits longer than the lock timeout is 503 BUSY and stores nothing', async () => {
+    const created = await pool.query<{ id: number }>(
+      `INSERT INTO users (email, accountnumber) VALUES ('busy@test.com', '30002') RETURNING id`,
+    );
+    const userId = created.rows[0]!.id;
+    // Another writer holds this user's lock for longer than `lock_timeout`.
+    const holder = new Client({ connectionString: testDbUrl() });
+    await holder.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+
+      const res = await api.post('/orders').send({ userId, ticker: 'PAMP', side: 'BUY', type: 'MARKET', size: 1 });
+
+      expectError(res, 503, 'BUSY');
+    } finally {
+      await holder.query('ROLLBACK');
+      await holder.end();
+    }
+    const stored = await pool.query('SELECT 1 FROM orders WHERE userid = $1', [userId]);
+    expect(stored.rowCount).toBe(0);
+  });
+
+  it('a statement that runs longer than the statement timeout is 503 BUSY', async () => {
+    const app = express();
+    app.use(requestContext);
+    app.get('/slow', async () => {
+      const client = new Client({ connectionString: testDbUrl(), statement_timeout: 100 });
+      await client.connect();
+      try {
+        await client.query('SELECT pg_sleep(2)');
+      } finally {
+        await client.end();
+      }
+    });
+    app.use(errorHandler);
+
+    const res = await request(app).get('/slow');
+
+    expectError(res, 503, 'BUSY');
+    expect(JSON.stringify(res.body)).not.toMatch(/statement|timeout|pg_sleep/i);
   });
 });

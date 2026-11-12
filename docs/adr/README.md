@@ -18,6 +18,6 @@ If you read only three, read [0002](0002-open-limit-orders-reserve-funds.md), [0
 
 ## Format
 
-Every record has the same sections: Context, Assumption, Decision, Alternatives considered, Consequences, Revisit when. The header links to the requirements and the design section it comes from.
+Every record has the same sections: Context, Assumption, Decision, Alternatives considered, Consequences, Tests, Revisit when. The header links to the requirements and the design section it comes from.
 
-These records were written before the code. Where one names a test, the test does not exist yet; the link to the test file is added when the code lands.
+These records were written before the code. The Tests section was added when the code landed: it links each decision to the tests that pin it, by the ids of the [spec, section 7](../03-spec.md#7-tests).

@@ -105,5 +105,5 @@ These are the points where two reasonable engineers would build different things
 | Decision records | `docs/adr/` |
 | Spec: endpoint contracts, rules, tests and order of work | `docs/03-spec.md` |
 | API, migrations and tests | `src/`, `db/`, `tests/` |
-| Request collection and examples | to be decided in the design |
+| Request collection and examples | `requests.http` (REST Client), `postman_collection.json` (Postman), and "Calling it" in the `README.md` |
 | Code review of my own work | `docs/06-code-review.md` |
