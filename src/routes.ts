@@ -53,6 +53,14 @@ const orderBody = z
     message: 'is required for LIMIT and refused for MARKET',
   });
 
+/** The optional `Idempotency-Key` header: 1 to 50 printable ASCII characters (spec, section 4.3). */
+const idempotencyHeader = z.object({
+  'idempotency-key': z
+    .string()
+    .regex(/^[\x20-\x7E]{1,50}$/, 'must be 1 to 50 printable ASCII characters')
+    .optional(),
+});
+
 export function createRoutes(pool: Pool): Router {
   const router = Router();
 
@@ -76,7 +84,10 @@ export function createRoutes(pool: Pool): Router {
   });
 
   router.post('/orders', async (req, res) => {
-    res.status(201).json(await submitOrder(pool, orderBody.parse(req.body)));
+    const body = orderBody.parse(req.body);
+    const key = idempotencyHeader.parse({ 'idempotency-key': req.get('idempotency-key') })['idempotency-key'];
+    const { order, replayed } = await submitOrder(pool, body, key);
+    res.status(replayed ? 200 : 201).json(order);
   });
 
   return router;

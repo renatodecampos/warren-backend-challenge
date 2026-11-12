@@ -36,7 +36,7 @@ Internal rule: all arithmetic is in integer cents ([ADR 0006](adr/0006-integer-c
 
 | HTTP | Code | When |
 | --- | --- | --- |
-| 400 | `VALIDATION_ERROR` | Body, query or path does not match the schema, or the body is not valid JSON |
+| 400 | `VALIDATION_ERROR` | Body, query, path or `Idempotency-Key` header does not match the schema, or the body is not valid JSON |
 | 400 | `INVALID_INSTRUMENT` | The cash instrument (`MONEDA`) used in `POST /orders` |
 | 404 | `USER_NOT_FOUND`, `INSTRUMENT_NOT_FOUND`, `ORDER_NOT_FOUND` | The id or ticker does not exist |
 | 404 | `NOT_FOUND` | No such route |
@@ -166,7 +166,7 @@ Body:
 
 Steps, in this order ([ADR 0003](adr/0003-per-user-row-lock.md), [0004](adr/0004-idempotency-key.md)):
 
-1. Validate the body. `400` if invalid.
+1. Validate the body and, if sent, the key. `400` if invalid.
 2. `BEGIN` at `READ COMMITTED`.
 3. `SELECT id FROM users WHERE id = $1 FOR UPDATE`. `404 USER_NOT_FOUND` if no row.
 4. If a key was sent, look for an order of this user with that key. Found with the same `request_hash`: return it with `200`. Found with another hash: `422 IDEMPOTENCY_KEY_REUSED`.
@@ -321,6 +321,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | I5 | Same key from two users gives two orders | ADR 0004 |
 | I6 | Two simultaneous requests with the same key give one row | ADR 0003, 0004 |
 | I7 | `amount` order replayed after the price changed returns the original order | ADR 0004 |
+| I8 | An invalid key (empty, 51 characters, not printable ASCII) is 400, nothing stored. A key of 50 characters is accepted | ADR 0004 |
 
 ### Functional: the rest
 
@@ -353,7 +354,7 @@ One vertical slice at a time. Each ends with a commit that leaves the suite gree
 | 3 | Asset search | S1 to S3 |
 | 4 | `POST /orders`: MARKET by size, then amount, then LIMIT and reservations, then rejections, then the cap | O1 to O10 |
 | 5 | The lock, proven by the concurrency test. Written to fail first without the lock. Timeouts answered as `503 BUSY` | O11, E2 |
-| 6 | Idempotency | I1 to I7 |
+| 6 | Idempotency | I1 to I8 |
 | 7 | Cancel, list, transfers | C1, C2, T1, T2 |
 | 8 | Request collection with examples, "Running it" in the README, links from the ADRs to the tests | NFR-6 |
 | 9 | Code review of my own work, `docs/06-code-review.md` | |
@@ -370,6 +371,7 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Unknown route, malformed JSON | `404 NOT_FOUND`; `400 VALIDATION_ERROR` |
 | Health with the database down | `503 DATABASE_UNAVAILABLE` |
 | Unknown fields in a body | Refused |
+| Invalid `Idempotency-Key` (empty, above 50 characters, or a character outside printable ASCII, `0x20` to `0x7E`) | `400 VALIDATION_ERROR`, the same as an invalid body. It is not ignored: a client that sent a key believes it is protected |
 | Paging | `limit` 1 to 100, default 20. `offset` up to 2,147,483,647, the same bound as an id. A `limit` above 100 is a `400`, not silently lowered |
 | Unknown query fields | Refused, the same as in a body |
 | Search order after ticker | By id, so that paging is stable if two instruments ever share a ticker |
