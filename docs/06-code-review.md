@@ -168,7 +168,7 @@ I would not chase 100% coverage. These are the gaps where a failure would change
 
 - **Test first.** The history shows a `test:` commit before the `feat:` commit for every slice from 1 to 7. Slice 0 is the skeleton and its own harness, where the tests and the infrastructure arrive together; I would not force a red-green split there.
 - **One slice, one branch, one pull request.** The branches in the repository follow the spec's order, and the pull requests stay small enough to review. That is what makes this review possible.
-- **Guard-rails.** `npm run check`, CI against a real PostgreSQL, the protected branches and `.claude/settings.json` are the parts of the process that do not depend on my discipline. They are described in [spec, section 6](03-spec.md#guard-rails).
+- **Guard-rails.** `npm run check`, CI against a real PostgreSQL, the no-direct-push rule on both shared branches and `.claude/settings.json` are the parts of the process that do not depend on my discipline. They are described in [spec, section 6](03-spec.md#guard-rails).
 - **The slice 8 status line.** Slice 8 merged during the review; the README status line now reads slices 0 to 8. Slice 8 is documentation only, so the code review is unaffected.
 - **This review is documentation only.** The spec gives slice 9 no tests, and a review that edits the code while reviewing it cannot be reviewed as a review. The findings above have proposed changes and proposed tests; they belong in a follow-up pull request, not in this one.
 

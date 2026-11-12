@@ -182,10 +182,9 @@ CI was on this list, with the trigger "before a second engineer joins". It is bu
 | Read replica and cache for market data and search | Read load competes with order writes |
 | Queue for order intake | Peak writes exceed what the primary handles synchronously. Changes the API contract, so it comes last |
 
-## 7. What comes next
+## 7. What followed
 
-1. Fix the labels on whiteboard v1 (duplicated text, dashed gateway, the unique constraint and `request_hash`).
-2. Code and tests, one vertical slice at a time, each slice test first.
-3. Code review of my own work.
+1. Code and tests, one vertical slice at a time, each slice test first ([spec, section 8](03-spec.md#8-order-of-work)).
+2. Code review of my own work ([06](06-code-review.md)), and the follow-up that closed four of its findings.
 
 The decisions that came out of this design are the [ADRs](adr/README.md).

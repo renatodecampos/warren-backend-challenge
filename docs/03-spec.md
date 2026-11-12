@@ -276,7 +276,7 @@ The code is written with an AI assistant, so the rules of section 1 are backed b
 | Layer | What | Stops |
 | --- | --- | --- |
 | 1. One command | `npm run check` runs the type check (strict), the linter (type-aware, so an un-awaited promise is an error) and the whole suite | A slice called done with a red test, a type error or a floating promise |
-| 2. CI and branches | GitHub Actions runs `npm run check` on every pull request to `development` and `main`, against a real PostgreSQL. Both branches are protected: no direct push, merge only with the check green | Code reaching a shared branch without passing layer 1 |
+| 2. CI and branches | GitHub Actions runs `npm run check` on every pull request to `development` and `main`, against a real PostgreSQL. Neither branch takes a direct push: every change is a pull request, merged only with the check green | Code reaching a shared branch without passing layer 1 |
 | 3. Limits on the assistant | `.claude/settings.json`, versioned: it cannot edit `db/database.sql`, cannot read `.env`, cannot push to `main` or `development`, and the type check runs after every file it edits. `CLAUDE.md` points it to this spec | The assistant changing the base schema, leaking secrets or skipping the pull request |
 
 Layer 3 is a convenience, not a security boundary: a command can be written to get around a pattern. Layer 2 is what enforces. The database constraints of section 5 are a fourth layer that needs no tooling: they hold even if a test is missing.
