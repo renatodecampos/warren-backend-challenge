@@ -26,7 +26,7 @@ Cash and positions are never stored. They are rebuilt on demand by replaying the
 
 `size` is always positive in the table; `side` gives the direction. Deposits, withdrawals and trades are one stream of events per user, so there is one place to read and one place to audit.
 
-Only `FILLED` orders count towards cash and positions (FR-P4). `NEW` orders do not move cash; how they affect what is available is a separate decision (ADR 0002, planned).
+Only `FILLED` orders count towards cash and positions (FR-P4). `NEW` orders do not move cash; how they affect what is available is a separate decision ([0002](0002-open-limit-orders-reserve-funds.md)).
 
 ## Alternatives considered
 
