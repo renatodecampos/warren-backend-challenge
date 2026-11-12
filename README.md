@@ -31,7 +31,7 @@ None of these blocked the work: each has a written assumption and a trigger to r
 | 3 | [Design](docs/02-design.md) | The picture, the assumption for each open point, the options weighed, the schema changes |
 | 4 | [Decision records](docs/adr/README.md) | One record per decision: assumption, alternatives, consequences, when to revisit |
 | 5 | [Spec](docs/03-spec.md) | Exactly what is built: endpoint contracts, rules, schema changes, the test list and the order of work |
-| 6 | [Request collection](requests.http) | One example per endpoint and per outcome, with the expected answer above each |
+| 6 | [Request collection](requests.http) | One example per endpoint and per outcome, with the expected answer above each. The same walk-through is in [`postman_collection.json`](postman_collection.json) for Postman |
 
 Short on time: this page, then the three records above.
 
@@ -61,6 +61,8 @@ The stack is described in [ADR 0009](docs/adr/0009-stack-and-data-access.md).
 ## Calling it
 
 [`requests.http`](requests.http) is the collection: every endpoint, with one request per outcome and the expected answer above each. It is in REST Client format, so in VS Code with the REST Client extension each request has a "Send Request" link. It is written as a walk-through on the fresh seed.
+
+For Postman, import [`postman_collection.json`](postman_collection.json). It is the v2.1 export of the same walk-through with assertions and collection variables (`baseUrl` and `userId`). Run the collection top to bottom on a fresh seed; the replay and repeated-cancel steps are explicit. The REST Client file remains the source if the two ever disagree.
 
 The three endpoints of the brief, with `curl`:
 
