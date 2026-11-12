@@ -8,7 +8,7 @@ Reviewed on 2026-11-12: `development` at `88a6e50` (slices 0 to 8). I started at
 
 1. I read the brief, the requirements, the design and the ADRs before the code. The spec was the contract; the ADRs were the reasons to check the code against.
 2. I traced every endpoint in both directions: contract to route to service to SQL, then SQL and response back to the contract. I did the same for the pure replay and the money helpers.
-3. I mapped every test id in the spec, section 7, to a test. All 41 ids are present. I read the tests for what they actually assert, not for their names.
+3. I mapped every test id in the spec, section 7, to a test. All 41 ids present at that point are there. I read the tests for what they actually assert, not for their names.
 4. I ran the commands a reviewer would run: `npm run check`, then targeted `supertest` probes against the test database for the edges the suite does not cover.
 5. I read the history of each slice to check test-first order. Slices 1 to 7 have a `test:` commit before the `feat:` commit. Slice 0, the skeleton and its harness, is one commit; it is the one slice where the test-first artefact is not separable.
 
@@ -137,7 +137,7 @@ The spec does not say whether a NUL is a valid string. Either decision is defens
 
 ## 5. Test review
 
-All 41 ids are present. The suite is strongest where the design is riskiest:
+All 41 ids present at that point are there. The suite is strongest where the design is riskiest:
 
 - The concurrency test (O11) is a real race, not a mock; the idempotency tests (I1 to I8) cover replay, reuse, per-user scoping and two simultaneous requests; the seed portfolio (P1) is a hand-computed example, field by field.
 - The money tests pin the two cases floats get wrong (U5, U7), and O8 pins both sides of the value cap.
@@ -199,4 +199,4 @@ The core is small and I can explain every query and every arithmetic step. The f
 
 ## 9. Follow-up
 
-After the review, PR #11 applied the approved fixes: CR-2 (malformed path and body encodings now answer `400`), CR-6 (the log lines have tests), CR-7 (the pool has an error listener) and CR-11 (a NUL in `q` or `ticker` is refused with `400`). A later follow-up applied CR-1: every route now refuses an unknown query field, covered by test E3. The findings above are kept as the snapshot before those changes. CR-3, CR-4, CR-5, CR-8 and the remaining test gaps stay open; the three findings that blocked production (CR-1, CR-2 and CR-7) and the logging test are closed.
+After the review, PR #11 applied the approved fixes: CR-2 (malformed path and body encodings now answer `400`), CR-6 (the log lines have tests), CR-7 (the pool has an error listener) and CR-11 (a NUL in `q` or `ticker` is refused with `400`). A later follow-up applied CR-1: every route now refuses an unknown query field, covered by test E3. A final pass closed the documentation drift (CR-3, CR-4, CR-5, CR-8), made a zero `close` mean no price in the portfolio as it already did for orders (P4), and added the tests listed in section 5: the pool statement timeout (E2), concurrent withdrawals and a rejected transfer replay (T2), the shared key namespace (T1), a cancelled `NEW` SELL releasing its shares (C1), a null price through the list and the replay (O7), average-cost rounding (P5), duplicate-ticker tie-breakers (S4, O1), the remaining constraints (D1) and the default list page (L1). The findings above are kept as the snapshot before those changes. CR-9, the shared test database, stays open as a test-infrastructure risk; every other finding is closed.

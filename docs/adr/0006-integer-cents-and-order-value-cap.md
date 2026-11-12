@@ -19,7 +19,7 @@ Integers fix this, but only up to a point. JavaScript numbers are exact for inte
 
 **Integer cents everywhere in the code.**
 
-- The database converts on the way out: `(price * 100)::bigint`.
+- The database stores and returns `NUMERIC(10,2)`; the code reads a price as a string and converts it to integer cents at the edge, in one place (`toCents`).
 - All arithmetic uses integer cents: balances, reservations, positions, cost.
 - Floats exist only at the edge: parsing the request (after checking for at most two decimals) and formatting the response.
 - Buying by `amount` uses `floor(amount / price)`, so the user never spends more than they asked to ([FR-O5](../01-requirements.md#orders)).
@@ -56,7 +56,7 @@ Integers fix this, but only up to a point. JavaScript numbers are exact for inte
 
 ## Tests
 
-The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test name starts with its id.
+The ids are those of the [spec, section 7](../03-spec.md#7-tests); each test is grouped under its id.
 
 | Test | What it pins |
 | --- | --- |
