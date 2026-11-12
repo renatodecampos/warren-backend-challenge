@@ -36,7 +36,7 @@ The limit price is used because it is the worst case for a BUY: it is the only a
 
 - The account cannot be overdrawn by a later execution.
 - Money can stay locked in orders that never execute. The user sees it as the difference between cash balance and available balance, and can cancel to release it.
-- Executing LIMIT orders is out of scope (the brief says there is no need to simulate the market), so nothing moves an order from `NEW` to `FILLED` yet. When something does, it must take the same per-user lock as order submission.
+- Executing LIMIT orders is out of scope (the brief says there is no need to simulate the market), so nothing moves an order from `NEW` to `FILLED` yet. When something does, it must take the same per-user lock as order submission ([0003](0003-per-user-row-lock.md)).
 - A `NEW` order is part of the read that every submission does, so the `(userId, status)` index matters for both statuses.
 
 ## Revisit when
