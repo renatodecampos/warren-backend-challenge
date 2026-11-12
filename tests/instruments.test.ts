@@ -18,11 +18,22 @@ beforeAll(async () => {
        ('PCT',   'Fifty% literal',     'ACCIONES'),
        ('UND',   'Under_score',        'ACCIONES')`,
   );
+  const first = await pool.query<{ id: number }>(
+    `INSERT INTO instruments (ticker, name, type) VALUES ('DUPS', 'Duplicate one', 'ACCIONES') RETURNING id`,
+  );
+  const second = await pool.query<{ id: number }>(
+    `INSERT INTO instruments (ticker, name, type) VALUES ('DUPS', 'Duplicate two', 'ACCIONES') RETURNING id`,
+  );
+  DUP_LOW = first.rows[0]!.id;
+  DUP_HIGH = second.rows[0]!.id;
 });
 
 afterAll(() => pool.end());
 
 const tickers = (body: unknown) => (body as { ticker: string }[]).map((instrument) => instrument.ticker);
+
+let DUP_LOW: number;
+let DUP_HIGH: number;
 
 describe('GET /instruments', () => {
   it('S1: finds by ticker, ignoring case, with id, ticker, name and type', async () => {
@@ -79,6 +90,12 @@ describe('GET /instruments', () => {
 
     expect(res.status).toBe(200);
     expect(tickers(res.body)).toEqual(expected);
+  });
+
+  it('S4: two instruments with one ticker tie by id', async () => {
+    const res = await api.get('/instruments').query({ q: 'DUPS' });
+
+    expect((res.body as { id: number }[]).map((instrument) => instrument.id)).toEqual([DUP_LOW, DUP_HIGH]);
   });
 
   it('S3: q is required', async () => {

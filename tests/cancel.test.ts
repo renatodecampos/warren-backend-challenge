@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import type { Portfolio } from '../src/portfolio';
-import { api, createUser, expectError, pool } from './helpers';
+import { api, createUser, expectError, insertFilled, pool } from './helpers';
 
 afterAll(() => pool.end());
 
@@ -60,6 +60,24 @@ describe('POST /orders/:orderId/cancel', () => {
       reservedCash: 0,
       availableBalance: 100_000,
     });
+  });
+
+  it('C1: cancelling a NEW SELL releases the reserved shares', async () => {
+    const userId = await createUser(100_000);
+    await insertFilled(userId, PAMP, 'BUY', 10, 900);
+    const open = await api
+      .post('/orders')
+      .send({ userId, instrumentId: PAMP, side: 'SELL', type: 'LIMIT', size: 4, price: 1_000 });
+    expect(open.body).toMatchObject({ status: 'NEW' });
+
+    // 4 of the 10 shares are reserved: 7 is above what is available.
+    const before = await api.post('/orders').send({ userId, instrumentId: PAMP, side: 'SELL', type: 'MARKET', size: 7 });
+    expect(before.body).toMatchObject({ status: 'REJECTED', rejectionReason: 'INSUFFICIENT_SHARES' });
+
+    await api.post(`/orders/${open.body.id}/cancel`).send({ userId });
+
+    const after = await api.post('/orders').send({ userId, instrumentId: PAMP, side: 'SELL', type: 'MARKET', size: 7 });
+    expect(after.body).toMatchObject({ status: 'FILLED' });
   });
 
   it('C2: cancelling a FILLED order is 409 ORDER_NOT_CANCELLABLE', async () => {

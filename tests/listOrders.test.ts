@@ -101,6 +101,18 @@ describe('GET /orders', () => {
     expect(await list({ userId: 2_147_483_647 })).toEqual([]);
   });
 
+  it('L1: the page is 20 by default', async () => {
+    const other = await createUser(0);
+    await pool.query(
+      `INSERT INTO orders (instrumentid, userid, side, size, price, type, status, datetime)
+       SELECT $1, $2, 'CASH_IN', 1, 1, 'MARKET', 'FILLED', clock_timestamp()
+         FROM generate_series(1, 21)`,
+      [CASH, other],
+    );
+
+    expect(await list({ userId: other })).toHaveLength(20);
+  });
+
   it.each([
     ['no userId', {}],
     ['a userId that is not an id', { userId: 'abc' }],

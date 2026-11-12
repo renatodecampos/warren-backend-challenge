@@ -12,6 +12,9 @@ const UNPRICED = 3;
 const ZERO_CLOSE = 12;
 const ONE_CENT = 51;
 
+/** A ticker two instruments share. The lookup must take the lowest id (spec, section 9). */
+let DUP_LOW: number;
+
 beforeAll(async () => {
   await pool.query(
     `INSERT INTO marketdata (instrumentid, date, close, previousclose) VALUES
@@ -19,6 +22,11 @@ beforeAll(async () => {
        ($2, '2023-07-17', 0.01, 36)`,
     [ZERO_CLOSE, ONE_CENT],
   );
+  const first = await pool.query<{ id: number }>(
+    `INSERT INTO instruments (ticker, name, type) VALUES ('DUPT', 'Duplicate low', 'ACCIONES') RETURNING id`,
+  );
+  DUP_LOW = first.rows[0]!.id;
+  await pool.query(`INSERT INTO instruments (ticker, name, type) VALUES ('DUPT', 'Duplicate high', 'ACCIONES')`);
 });
 
 interface StoredOrder {
@@ -109,6 +117,17 @@ describe('POST /orders', () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ instrumentId: PAMP, ticker: 'PAMP', status: 'FILLED' });
+  });
+
+  it('O1: a ticker two instruments share resolves to the lowest id', async () => {
+    const userId = await createUser(1_000);
+
+    const res = await api
+      .post('/orders')
+      .send({ userId, ticker: 'dupt', side: 'BUY', type: 'LIMIT', size: 1, price: 10 });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ instrumentId: DUP_LOW, ticker: 'DUPT', status: 'NEW' });
   });
 
   it('O2: a MARKET BUY by amount stores floor(amount / price) shares', async () => {
@@ -296,6 +315,21 @@ describe('POST /orders', () => {
       .send({ userId, instrumentId: UNPRICED, side: 'BUY', type: 'LIMIT', size: 5, price: 10 });
 
     expect(res.body).toMatchObject({ price: 10, status: 'NEW' });
+  });
+
+  it('O7: a NO_MARKET_PRICE order keeps its null price through the list and the replay', async () => {
+    const userId = await createUser(0);
+    const order = { userId, instrumentId: UNPRICED, side: 'BUY', type: 'MARKET', size: 5 };
+
+    const created = await api.post('/orders').set('Idempotency-Key', 'no-price-1').send(order);
+    expect(created.body).toMatchObject({ price: null, status: 'REJECTED', rejectionReason: 'NO_MARKET_PRICE' });
+
+    const listed = await api.get('/orders').query({ userId });
+    expect(listed.body).toEqual([created.body]);
+
+    const replayed = await api.post('/orders').set('Idempotency-Key', 'no-price-1').send(order);
+    expect(replayed.status).toBe(200);
+    expect(replayed.body).toEqual(created.body);
   });
 
   it.each([
