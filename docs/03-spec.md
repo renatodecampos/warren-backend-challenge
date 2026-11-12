@@ -345,6 +345,7 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | D1 | The base file and the migration apply to an empty database, the migration can run twice, and the constraints refuse an invalid order | NFR-5 |
 | E1 | Every error has the one shape, an unexpected error never shows internals, and every response has `X-Request-Id` (an incoming one is reused) | ADR 0005, 0008 |
 | E2 | A request that waits longer than the lock timeout is answered `503 BUSY` | ADR 0003, 0008 |
+| E3 | An unknown query field is `400 VALIDATION_ERROR` on every route, including the ones with no query contract: health, portfolio, `POST /orders`, cancel and transfers | section 2, section 9 |
 
 ## 8. Order of work
 
