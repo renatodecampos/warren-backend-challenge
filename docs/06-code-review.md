@@ -199,4 +199,4 @@ The core is small and I can explain every query and every arithmetic step. The f
 
 ## 9. Follow-up
 
-After the review, PR #11 applied the approved fixes: CR-2 (malformed path and body encodings now answer `400`), CR-6 (the log lines have tests), CR-7 (the pool has an error listener) and CR-11 (a NUL in `q` or `ticker` is refused with `400`). The findings above are kept as the snapshot before that change. CR-1, CR-3, CR-4, CR-5, CR-8 and the remaining test gaps stay open; the production-readiness sentence in section 2 now reduces to CR-1.
+After the review, PR #11 applied the approved fixes: CR-2 (malformed path and body encodings now answer `400`), CR-6 (the log lines have tests), CR-7 (the pool has an error listener) and CR-11 (a NUL in `q` or `ticker` is refused with `400`). A later follow-up applied CR-1: every route now refuses an unknown query field, covered by test E3. The findings above are kept as the snapshot before those changes. CR-3, CR-4, CR-5, CR-8 and the remaining test gaps stay open; the three findings that blocked production (CR-1, CR-2 and CR-7) and the logging test are closed.
