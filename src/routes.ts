@@ -37,6 +37,9 @@ const ordersQuery = z.strictObject({
   ...paging,
 });
 
+/** A route with no query contract accepts no query field at all (spec, section 9). */
+const emptyQuery = z.strictObject({});
+
 /** An id as a JSON body carries it: a number, not a string. */
 const bodyId = z.number().int().min(1).max(2_147_483_647);
 
@@ -87,7 +90,8 @@ const idempotencyHeader = z.object({
 export function createRoutes(pool: Pool): Router {
   const router = Router();
 
-  router.get('/health', async (_req, res) => {
+  router.get('/health', async (req, res) => {
+    emptyQuery.parse(req.query);
     try {
       await pool.query('SELECT 1');
     } catch {
@@ -97,6 +101,7 @@ export function createRoutes(pool: Pool): Router {
   });
 
   router.get('/users/:userId/portfolio', async (req, res) => {
+    emptyQuery.parse(req.query);
     const { userId } = z.object({ userId: id }).parse(req.params);
     res.json(await getPortfolio(pool, userId));
   });
@@ -107,6 +112,7 @@ export function createRoutes(pool: Pool): Router {
   });
 
   router.post('/orders', async (req, res) => {
+    emptyQuery.parse(req.query);
     const body = orderBody.parse(req.body);
     const key = idempotencyHeader.parse({ 'idempotency-key': req.get('idempotency-key') })['idempotency-key'];
     const { order, replayed } = await submitOrder(pool, body, key);
@@ -119,12 +125,14 @@ export function createRoutes(pool: Pool): Router {
   });
 
   router.post('/orders/:orderId/cancel', async (req, res) => {
+    emptyQuery.parse(req.query);
     const { orderId } = z.object({ orderId: id }).parse(req.params);
     const { userId } = cancelBody.parse(req.body);
     res.json(await cancelOrder(pool, orderId, userId));
   });
 
   router.post('/transfers', async (req, res) => {
+    emptyQuery.parse(req.query);
     const body = transferBody.parse(req.body);
     const key = idempotencyHeader.parse({ 'idempotency-key': req.get('idempotency-key') })['idempotency-key'];
     const { order, replayed } = await submitTransfer(pool, body, key);
