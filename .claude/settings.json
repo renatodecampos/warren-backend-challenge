@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/db/database.sql)",
+      "Read(/.env)",
+      "Read(/.env.local)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin development*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && [ -d node_modules ] || exit 0; npm run --silent typecheck 1>&2 || exit 2",
+            "timeout": 60,
+            "statusMessage": "Type check"
+          }
+        ]
+      }
+    ]
+  }
+}

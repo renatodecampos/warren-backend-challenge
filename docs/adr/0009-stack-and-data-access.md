@@ -25,6 +25,7 @@ The service is small: three capabilities, one database. What is hard in it is no
 | Schema changes | Numbered `.sql` migration files | One migration today. A migration tool would be more machinery than the change it manages |
 | Tests | `vitest` and `supertest`, against a real PostgreSQL | The behaviour that matters lives in the database: the lock, the constraints, the unique index. A mocked database would test none of it |
 | Local environment | Docker Compose with PostgreSQL 16 | One command to get the same database the tests use |
+| Checks | `npm run check`: strict type check, type-aware ESLint, the whole suite. The same command runs in CI | The code is written with an AI assistant, so "done" has to be something a machine can refuse ([03 Spec, section 6](../03-spec.md#guard-rails)) |
 
 Layout: routes (HTTP and validation), services (one per capability, own the transaction), and a pure module for the replay and the money arithmetic, which has no I/O and is tested without a database.
 

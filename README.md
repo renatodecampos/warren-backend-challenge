@@ -2,7 +2,7 @@
 
 A small trading API: **portfolio**, **asset search** and **order submission** (MARKET and LIMIT), on Node.js, TypeScript, Express and PostgreSQL.
 
-**Status: design phase.** This repository currently holds the requirements, the design, the decision records and the spec. The code is written from the spec, test first, and comes next together with the instructions to run it.
+**Status: slice 0 done, of slices 0 to 9.** The requirements, the design, the decision records and the spec are complete. The code is written from the spec, test first, one slice at a time ([spec, section 8](docs/03-spec.md#8-order-of-work)). In place so far: the project skeleton, the database with its migration, the health endpoint, the error contract and the guard-rails. The three endpoints of the brief come in the next slices.
 
 ## The three decisions that matter
 
@@ -36,4 +36,27 @@ Short on time: this page, then the three records above.
 
 ## Running it
 
-Nothing to run yet. With the code this section will have the commands to start the database, start the API and run the tests. The stack is described in [ADR 0009](docs/adr/0009-stack-and-data-access.md).
+Requirements: Node 20+ and Docker.
+
+```bash
+npm install
+npm run db:up        # PostgreSQL 16 with db/database.sql and the migration applied
+npm run dev          # http://localhost:3000
+npm run check        # type check + lint + tests
+```
+
+The defaults match `docker-compose.yml`, so nothing else is needed. To change them, set the variables in `.env.example`. The tests create and drop their own database (`warren_challenge_test`) and never touch the development one.
+
+No Docker? Point `DATABASE_URL` and `TEST_ADMIN_URL` to any PostgreSQL 13+ and run `db/database.sql`, then `db/migrations/001_constraints_indexes.sql`, on an empty database.
+
+The stack is described in [ADR 0009](docs/adr/0009-stack-and-data-access.md).
+
+## How it is built
+
+The code is written with an AI coding assistant, from the spec. Three layers keep that honest, described in the [spec, section 6](docs/03-spec.md#guard-rails):
+
+1. `npm run check` is the definition of done: strict types, type-aware lint and the whole suite.
+2. CI runs the same command on every pull request, and `main` and `development` only take merges with it green.
+3. The assistant works under versioned limits ([`.claude/settings.json`](.claude/settings.json), [`CLAUDE.md`](CLAUDE.md)): it cannot edit the base schema, read `.env` or push to a shared branch.
+
+Each slice is a branch from `development` and a pull request that I review.
