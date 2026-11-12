@@ -22,7 +22,7 @@ Rules for whoever implements it, person or assistant:
 | --- | --- |
 | Format | JSON in and out, `Content-Type: application/json` |
 | Money | Pesos as JSON numbers with at most two decimals (`930`, `450.5`, `99999999.99`). More than two decimals is a `400` |
-| Percentages | Numbers with two decimals, already multiplied by 100 (`18.18` means 18.18%). `null` when undefined |
+| Percentages | Numbers with two decimals, already multiplied by 100 (`18.18` means 18.18%), rounded half away from zero. `null` when undefined |
 | Ids | Positive 32-bit integers |
 | Dates | ISO 8601, UTC |
 | Request id | Every response carries `X-Request-Id`. An incoming `X-Request-Id` is reused, otherwise one is generated. It is in every log line |
@@ -372,6 +372,8 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Unknown fields in a body | Refused |
 | Paging | `limit` 1 to 100, default 20 |
 | Portfolio ordering | By market value, descending |
+| Rounding of percentages | Half away from zero, so a gain and a loss of the same size show the same number. For cost, which is never negative, this is the same as half up |
+| Portfolio `currency` | The constant `ARS`. The system has one currency: one cash instrument, every price in pesos |
 | Ticker lookup | Case-insensitive, exact |
 | `SELL` by `amount` | Allowed, same `floor(amount / price)` rule as `BUY` |
 
