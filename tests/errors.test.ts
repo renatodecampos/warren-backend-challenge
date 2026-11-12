@@ -1,4 +1,5 @@
 import express from 'express';
+import { Client } from 'pg';
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -6,6 +7,7 @@ import { createApp, errorHandler, requestContext } from '../src/app';
 import { createPool } from '../src/db';
 import { AppError } from '../src/errors';
 import { api, expectError, pool } from './helpers';
+import { testDbUrl } from './test-env';
 
 afterAll(() => pool.end());
 
@@ -89,5 +91,50 @@ describe('E1: X-Request-Id', () => {
 
     expect(res.headers['x-request-id']).not.toContain(' ');
     expect(res.headers['x-request-id']).toMatch(/^[\w.-]{8,}$/);
+  });
+});
+
+describe('E2: timeouts are 503 BUSY', () => {
+  it('an order that waits longer than the lock timeout is 503 BUSY and stores nothing', async () => {
+    const created = await pool.query<{ id: number }>(
+      `INSERT INTO users (email, accountnumber) VALUES ('busy@test.com', '30002') RETURNING id`,
+    );
+    const userId = created.rows[0]!.id;
+    // Another writer holds this user's lock for longer than `lock_timeout`.
+    const holder = new Client({ connectionString: testDbUrl() });
+    await holder.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+
+      const res = await api.post('/orders').send({ userId, ticker: 'PAMP', side: 'BUY', type: 'MARKET', size: 1 });
+
+      expectError(res, 503, 'BUSY');
+    } finally {
+      await holder.query('ROLLBACK');
+      await holder.end();
+    }
+    const stored = await pool.query('SELECT 1 FROM orders WHERE userid = $1', [userId]);
+    expect(stored.rowCount).toBe(0);
+  });
+
+  it('a statement that runs longer than the statement timeout is 503 BUSY', async () => {
+    const app = express();
+    app.use(requestContext);
+    app.get('/slow', async () => {
+      const client = new Client({ connectionString: testDbUrl(), statement_timeout: 100 });
+      await client.connect();
+      try {
+        await client.query('SELECT pg_sleep(2)');
+      } finally {
+        await client.end();
+      }
+    });
+    app.use(errorHandler);
+
+    const res = await request(app).get('/slow');
+
+    expectError(res, 503, 'BUSY');
+    expect(JSON.stringify(res.body)).not.toMatch(/statement|timeout|pg_sleep/i);
   });
 });
