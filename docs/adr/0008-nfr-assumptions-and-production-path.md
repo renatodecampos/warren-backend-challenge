@@ -33,6 +33,7 @@ What this version commits to, so that it can be operated and checked:
 - Constraints and indexes added by a migration, each justified in [02 Design, section 5](../02-design.md#5-changes-to-the-schema).
 - Functional tests against a real PostgreSQL, including a concurrency test and the idempotency cases.
 - Statement and lock timeouts on the database connection, so a stuck transaction cannot hold a user's lock indefinitely ([0003](0003-per-user-row-lock.md)).
+- CI on every pull request, with protected branches. I first planned it for "before a second engineer joins". The code is written with an AI assistant, which is a second contributor from the first commit, so the check that keeps these records from regressing cannot wait ([03 Spec, section 6](../03-spec.md#guard-rails)).
 
 ## Path to production
 
@@ -44,7 +45,7 @@ Ordered by what I would do first. Each step has the trigger that justifies it, s
 | Idempotency key mandatory ([0004](0004-idempotency-key.md)) | Same moment | Protection against retries only exists when the client sends a key |
 | Rate limiting per user and per IP at the gateway | Before public exposure | Protects the per-user lock and the database from abuse |
 | Metrics, traces and alerts: order latency, rejection rate, lock wait | Before production | The triggers below cannot be observed without them |
-| CI running the tests, plus an OpenAPI contract | Before a second engineer joins | Keeps the behaviour in these records from regressing |
+| An OpenAPI contract | Before a second engineer joins | Gives clients a contract that does not depend on reading these records |
 | LIMIT execution job, taking the same per-user lock | When the product needs LIMIT orders to fill | Without the lock it could overdraw an account |
 | Materialised balances and positions | Replay or lock wait visible in latency | Constant-time checks and a short lock |
 | Read replica and cache for market data and search | Read load competes with order writes | Reads tolerate staleness; writes do not |

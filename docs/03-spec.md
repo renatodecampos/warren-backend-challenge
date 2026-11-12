@@ -36,15 +36,17 @@ Internal rule: all arithmetic is in integer cents ([ADR 0006](adr/0006-integer-c
 
 | HTTP | Code | When |
 | --- | --- | --- |
-| 400 | `VALIDATION_ERROR` | Body, query or path does not match the schema |
+| 400 | `VALIDATION_ERROR` | Body, query or path does not match the schema, or the body is not valid JSON |
 | 400 | `INVALID_INSTRUMENT` | The cash instrument (`MONEDA`) used in `POST /orders` |
 | 404 | `USER_NOT_FOUND`, `INSTRUMENT_NOT_FOUND`, `ORDER_NOT_FOUND` | The id or ticker does not exist |
+| 404 | `NOT_FOUND` | No such route |
 | 409 | `ORDER_NOT_CANCELLABLE` | Cancel of an order that is not `NEW` |
 | 422 | `AMOUNT_BELOW_ONE_SHARE` | `amount` buys less than one share |
 | 422 | `NO_PRICE_FOR_AMOUNT` | `amount` given and the instrument has no market price |
 | 422 | `ORDER_VALUE_TOO_LARGE` | `size x price` above 99,999,999.99 |
 | 422 | `IDEMPOTENCY_KEY_REUSED` | Same key, different request |
 | 503 | `BUSY` | Lock or statement timeout. Safe to retry with the same idempotency key |
+| 503 | `DATABASE_UNAVAILABLE` | Health check only: the database did not answer |
 | 500 | `INTERNAL_ERROR` | Anything else. The message never contains internals |
 
 Rejections by the market are **not** errors. They are a `201` with `status: "REJECTED"` and a `rejectionReason` of `INSUFFICIENT_FUNDS`, `INSUFFICIENT_SHARES` or `NO_MARKET_PRICE` ([ADR 0005](adr/0005-rejected-orders-are-stored.md)).
@@ -224,7 +226,7 @@ Same steps 2 to 4 as `POST /orders`. Then: the instrument is the cash instrument
 
 ### 4.7 `GET /health`
 
-`200 { "status": "ok" }` after `SELECT 1`. `503` if the database does not answer.
+`200 { "status": "ok" }` after `SELECT 1`. `503 DATABASE_UNAVAILABLE`, in the error shape, if the database does not answer.
 
 ## 5. Database
 
@@ -262,7 +264,19 @@ db/                  database.sql, migrations/
 tests/               functional tests against a real PostgreSQL; unit tests for the pure modules
 ```
 
-Configuration by environment variables: `PORT`, `DATABASE_URL`. Docker Compose starts PostgreSQL 16 with the base file and the migration applied. The test run creates and drops its own database.
+Configuration by environment variables: `PORT`, `DATABASE_URL`, and `TEST_ADMIN_URL` for the tests. Docker Compose starts PostgreSQL 16 with the base file and the migration applied. The test run creates and drops its own database.
+
+### Guard-rails
+
+The code is written with an AI assistant, so the rules of section 1 are backed by checks that fail by themselves. Three layers, all in slice 0:
+
+| Layer | What | Stops |
+| --- | --- | --- |
+| 1. One command | `npm run check` runs the type check (strict), the linter (type-aware, so an un-awaited promise is an error) and the whole suite | A slice called done with a red test, a type error or a floating promise |
+| 2. CI and branches | GitHub Actions runs `npm run check` on every pull request to `development` and `main`, against a real PostgreSQL. Both branches are protected: no direct push, merge only with the check green | Code reaching a shared branch without passing layer 1 |
+| 3. Limits on the assistant | `.claude/settings.json`, versioned: it cannot edit `db/database.sql`, cannot read `.env`, cannot push to `main` or `development`, and the type check runs after every file it edits. `CLAUDE.md` points it to this spec | The assistant changing the base schema, leaking secrets or skipping the pull request |
+
+Layer 3 is a convenience, not a security boundary: a command can be written to get around a pattern. Layer 2 is what enforces. The database constraints of section 5 are a fourth layer that needs no tooling: they hold even if a test is missing.
 
 ## 7. Tests
 
@@ -323,7 +337,9 @@ Each test has an id, so an ADR can link to it. "Seed" means user 1 of my `databa
 | S2 | Ranking: exact ticker before prefix before name | Q7 |
 | S3 | Cash is not returned; `%` and `_` are literal; `q` is required; page size is capped | Q7 |
 | H1 | Health is 200 with the database up | ADR 0008 |
-| E1 | Every error has the one shape, and every response has `X-Request-Id` | ADR 0005, 0008 |
+| D1 | The base file and the migration apply to an empty database, the migration can run twice, and the constraints refuse an invalid order | NFR-5 |
+| E1 | Every error has the one shape, an unexpected error never shows internals, and every response has `X-Request-Id` (an incoming one is reused) | ADR 0005, 0008 |
+| E2 | A request that waits longer than the lock timeout is answered `503 BUSY` | ADR 0003, 0008 |
 
 ## 8. Order of work
 
@@ -331,12 +347,12 @@ One vertical slice at a time. Each ends with a commit that leaves the suite gree
 
 | Slice | Delivers | Tests |
 | --- | --- | --- |
-| 0 | Project, Docker Compose, base SQL and migration, app skeleton, error shape, request id, health, test harness | H1, E1 |
+| 0 | Project, Docker Compose, base SQL and migration, app skeleton, error shape, request id, health, test harness, and the three guard-rail layers of section 6 | H1, D1, E1 |
 | 1 | `money.ts` and the pure replay | U1 to U7 |
 | 2 | Portfolio | P1 to P3 |
 | 3 | Asset search | S1 to S3 |
 | 4 | `POST /orders`: MARKET by size, then amount, then LIMIT and reservations, then rejections, then the cap | O1 to O10 |
-| 5 | The lock, proven by the concurrency test. Written to fail first without the lock | O11 |
+| 5 | The lock, proven by the concurrency test. Written to fail first without the lock. Timeouts answered as `503 BUSY` | O11, E2 |
 | 6 | Idempotency | I1 to I7 |
 | 7 | Cancel, list, transfers | C1, C2, T1, T2 |
 | 8 | Request collection with examples, "Running it" in the README, links from the ADRs to the tests | NFR-6 |
@@ -351,6 +367,8 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Cancelling an order that is not `NEW` | `409 ORDER_NOT_CANCELLABLE` |
 | Cancelling another user's order | `404`, the same as an order that does not exist, so ids do not leak |
 | Timeouts | `lock_timeout` 2s, `statement_timeout` 5s, answered as `503 BUSY` |
+| Unknown route, malformed JSON | `404 NOT_FOUND`; `400 VALIDATION_ERROR` |
+| Health with the database down | `503 DATABASE_UNAVAILABLE` |
 | Unknown fields in a body | Refused |
 | Paging | `limit` 1 to 100, default 20 |
 | Portfolio ordering | By market value, descending |
@@ -359,4 +377,4 @@ These are details the ADRs did not settle. They are small enough not to need a r
 
 ## 10. Not in this spec
 
-Everything in [01 Requirements, section 3](01-requirements.md#3-out-of-scope) and in [02 Design, section 6](02-design.md#6-deliberately-not-built-and-when-it-would-be): authentication, rate limiting, LIMIT execution, materialised balances, metrics, CI, replicas, queues.
+Everything in [01 Requirements, section 3](01-requirements.md#3-out-of-scope) and in [02 Design, section 6](02-design.md#6-deliberately-not-built-and-when-it-would-be): authentication, rate limiting, LIMIT execution, materialised balances, metrics, replicas, queues.
