@@ -43,7 +43,7 @@ Internal rule: all arithmetic is in integer cents ([ADR 0006](adr/0006-integer-c
 | 409 | `ORDER_NOT_CANCELLABLE` | Cancel of an order that is not `NEW` |
 | 422 | `AMOUNT_BELOW_ONE_SHARE` | `amount` buys less than one share |
 | 422 | `NO_PRICE_FOR_AMOUNT` | `amount` given and the instrument has no market price |
-| 422 | `ORDER_VALUE_TOO_LARGE` | `size x price` above 99,999,999.99 |
+| 422 | `ORDER_VALUE_TOO_LARGE` | `size x price` above 99,999,999.99, or an `amount` that buys more shares than one order can hold |
 | 422 | `IDEMPOTENCY_KEY_REUSED` | Same key, different request |
 | 503 | `BUSY` | Lock or statement timeout. Safe to retry with the same idempotency key |
 | 503 | `DATABASE_UNAVAILABLE` | Health check only: the database did not answer |
@@ -161,8 +161,8 @@ Body:
 | `instrumentId` or `ticker` | id, or string of 1 to 10 | exactly one. Ticker match is case-insensitive |
 | `side` | `BUY`, `SELL` | required |
 | `type` | `MARKET`, `LIMIT` | required |
-| `size` or `amount` | positive integer, or money | exactly one |
-| `price` | money | required for `LIMIT`, refused for `MARKET` |
+| `size` or `amount` | positive 32-bit integer, or money | exactly one |
+| `price` | money, above zero | required for `LIMIT`, refused for `MARKET` |
 
 Steps, in this order ([ADR 0003](adr/0003-per-user-row-lock.md), [0004](adr/0004-idempotency-key.md)):
 
@@ -171,10 +171,10 @@ Steps, in this order ([ADR 0003](adr/0003-per-user-row-lock.md), [0004](adr/0004
 3. `SELECT id FROM users WHERE id = $1 FOR UPDATE`. `404 USER_NOT_FOUND` if no row.
 4. If a key was sent, look for an order of this user with that key. Found with the same `request_hash`: return it with `200`. Found with another hash: `422 IDEMPOTENCY_KEY_REUSED`.
 5. Resolve the instrument. `404 INSTRUMENT_NOT_FOUND`; `400 INVALID_INSTRUMENT` for cash.
-6. Price: `LIMIT` uses the given price; `MARKET` uses the latest non-null `close`.
+6. Price: `LIMIT` uses the given price; `MARKET` uses the latest non-null `close`. A `close` that is not above zero is no price.
 7. No price (only possible for `MARKET`): with `size`, store `REJECTED` with `NO_MARKET_PRICE` and a null price; with `amount`, `422 NO_PRICE_FOR_AMOUNT`.
 8. Size: given, or `floor(amount / price)`. Zero: `422 AMOUNT_BELOW_ONE_SHARE`.
-9. `size x price` above the cap: `422 ORDER_VALUE_TOO_LARGE`. Checked before any other use of the product.
+9. `size x price` above the cap: `422 ORDER_VALUE_TOO_LARGE`. Checked before any other use of the product. The same answer when `amount` gives a `size` above 2,147,483,647.
 10. Load the account state (section 3).
 11. `BUY` with `size x price` > available cash: `REJECTED`, `INSUFFICIENT_FUNDS`. `SELL` with `size` > available shares: `REJECTED`, `INSUFFICIENT_SHARES`.
 12. Otherwise status is `FILLED` for `MARKET` and `NEW` for `LIMIT`.
@@ -376,7 +376,10 @@ These are details the ADRs did not settle. They are small enough not to need a r
 | Portfolio ordering | By market value, descending |
 | Rounding of percentages | Half away from zero, so a gain and a loss of the same size show the same number. For cost, which is never negative, this is the same as half up |
 | Portfolio `currency` | The constant `ARS`. The system has one currency: one cash instrument, every price in pesos |
-| Ticker lookup | Case-insensitive, exact |
+| Ticker lookup | Case-insensitive, exact. The lowest id if two instruments ever share a ticker |
+| Largest `size` | 2,147,483,647, what the `INT` column holds. Above it a given `size` is a `400`; a `size` computed from `amount` is `422 ORDER_VALUE_TOO_LARGE`, because it depends on the price and the client's remedy is the same: split the order |
+| `price` of zero | Refused with `400`. An `amount` of zero is not: it buys less than one share, so it is the `422` of step 8 |
+| Market `close` of zero or below | Not a price for an order: the outcome of step 7. It cannot fill an order and cannot divide an `amount` |
 | `SELL` by `amount` | Allowed, same `floor(amount / price)` rule as `BUY` |
 
 ## 10. Not in this spec
