@@ -10,7 +10,7 @@ The brief leaves several things open. Instead of guessing silently, each record 
 | [0004](0004-idempotency-key.md) | Retries are safe with an idempotency key | Accepted |
 | [0005](0005-rejected-orders-are-stored.md) | Orders refused by the market are stored as `REJECTED` and return 201 | Accepted |
 | [0006](0006-integer-cents-and-order-value-cap.md) | Money is handled as integer cents, with a cap on order value | Accepted |
-| 0007 | How returns are defined (total and daily) | Planned |
+| [0007](0007-return-definitions.md) | Returns: total at average cost, daily per position | Accepted |
 | 0008 | Non-functional assumptions and the path to production | Planned |
 
 ## Format
